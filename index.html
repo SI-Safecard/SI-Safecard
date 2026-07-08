@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Safecard · Seguimiento de Instalación y Calidad</title>
+<style>
+  :root{
+    --or:#F26522;--or-dark:#D14E12;--or-soft:#FDE6D9;
+    --ink:#1F2933;--muted:#64748B;--line:#E4E7EB;--bg:#F5F6F7;--card:#FFFFFF;
+    --green:#16A34A;--green-soft:#DCFCE7;
+    --c:#16A34A;--pc:#F59E0B;--nc:#DC2626;--pend:#94A3B8;
+    --radius:12px;--shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.09);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.45;-webkit-text-size-adjust:100%}
+  h1,h2,h3{margin:0;font-weight:700;letter-spacing:-.01em}
+  button{font-family:inherit;cursor:pointer}
+  input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink);width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--or);box-shadow:0 0 0 3px rgba(242,101,34,.13)}
+  textarea{resize:vertical;min-height:60px}
+  label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em}
+
+  header{background:linear-gradient(135deg,var(--or),var(--or-dark));color:#fff;padding:12px 18px;position:sticky;top:0;z-index:50;box-shadow:var(--shadow)}
+  .head-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;max-width:1200px;margin:0 auto;position:relative}
+  .head-actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .btn{border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.13);color:#fff;padding:8px 13px;border-radius:8px;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;transition:background .15s}
+  .btn:hover{background:rgba(255,255,255,.24)}
+  .btn.primary{background:#fff;color:var(--or-dark);border-color:#fff}
+  .btn.primary:hover{background:#fff3ec}
+
+  nav.tabs{background:#fff;border-bottom:1px solid var(--line);position:sticky;top:53px;z-index:40;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tabs-inner{display:flex;max-width:1200px;margin:0 auto;min-width:max-content}
+  .tab{padding:13px 18px;border:none;background:none;color:var(--muted);font-weight:600;font-size:14px;border-bottom:3px solid transparent;white-space:nowrap;display:flex;align-items:center;gap:7px}
+  .tab .num{background:var(--or-soft);color:var(--or-dark);font-size:11px;font-weight:800;min-width:20px;height:20px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
+  .tab.active{color:var(--or);border-bottom-color:var(--or)}
+  .tab.active .num{background:var(--or);color:#fff}
+
+  main{max-width:1200px;margin:0 auto;padding:20px 18px 80px}
+  .panel{display:none;animation:fade .2s ease}.panel.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:16px;box-shadow:var(--shadow)}
+  .card h2{font-size:16px;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+  .card .hint{color:var(--muted);font-size:13px;margin-bottom:14px}
+  .card-title-bar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}.card-title-bar h2{margin:0}
+
+  .grid{display:grid;gap:12px}
+  .grid.c2{grid-template-columns:1fr 1fr}.grid.c3{grid-template-columns:1fr 1fr 1fr}.grid.c4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:720px){.grid.c2,.grid.c3,.grid.c4{grid-template-columns:1fr}}
+
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700}
+  .pill.or{background:var(--or-soft);color:var(--or-dark)}
+
+  .progress{height:10px;background:#ECEEF0;border-radius:999px;overflow:hidden}
+  .progress>span{display:block;height:100%;background:linear-gradient(90deg,var(--or),var(--or-dark));border-radius:999px;transition:width .4s}
+  .progress.green>span{background:linear-gradient(90deg,#22C55E,var(--green))}
+  .kpi{display:flex;flex-direction:column;gap:2px;padding:14px;border:1px solid var(--line);border-radius:10px;background:#fff}
+  .kpi .v{font-size:26px;font-weight:800;color:var(--or-dark);line-height:1}
+  .kpi .l{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:#FAFBFB;font-weight:700}
+  .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+  .center{text-align:center}.right{text-align:right}
+  .total-row td{font-weight:800;background:#FAFBFB;border-top:2px solid var(--or)}
+
+  .iconbtn{border:1px solid var(--line);background:#fff;border-radius:7px;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;color:var(--muted);font-size:15px}
+  .iconbtn:hover{border-color:var(--nc);color:var(--nc)}
+  .addbtn{border:1px dashed var(--or);background:var(--or-soft);color:var(--or-dark);padding:9px 14px;border-radius:8px;font-weight:600;font-size:13px}
+  .addbtn:hover{background:#fbd9c6}
+
+  .sector-head{display:flex;align-items:center;gap:10px;margin:18px 0 8px;padding-bottom:6px;border-bottom:2px solid var(--or-soft)}
+  .sector-head .nm{font-weight:800;font-size:14px;color:var(--or-dark);text-transform:uppercase;letter-spacing:.03em}
+  .sector-head .badge{font-size:11px;font-weight:700;color:var(--muted);background:#F1F2F4;padding:2px 8px;border-radius:999px}
+  .sector-head:first-child{margin-top:0}
+
+  .stages{display:flex;gap:5px;flex-wrap:wrap}
+  .stage{font-size:11px;font-weight:700;padding:5px 9px;border-radius:7px;border:1px solid var(--line);background:#fff;color:var(--muted);user-select:none}
+  .stage.on{background:var(--or);color:#fff;border-color:var(--or)}
+  .stage-all{border-style:dashed;border-color:var(--or);color:var(--or-dark);background:#fff;font-weight:800}
+  .stage-all:hover{background:var(--or-soft)}
+  .stage-all.on{background:var(--green);border-color:var(--green);border-style:solid;color:#fff}
+
+  .eq-card{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-left:5px solid var(--pend);border-radius:10px;padding:11px 13px;margin-bottom:8px;background:#fff;transition:border-color .2s}
+  .eq-card.done{border-left-color:var(--green);background:linear-gradient(90deg,var(--green-soft),#fff 60%)}
+  .eq-card.partial{border-left-color:var(--or)}
+  .eq-info{min-width:150px;flex-shrink:0}
+  .eq-info .nm{font-weight:700;font-size:14px;line-height:1.2}
+  .eq-info .pct{font-size:11px;font-weight:800;color:var(--muted);margin-top:3px}
+  .eq-info .pct b{color:var(--or-dark)}
+  .eq-info.done .pct b{color:var(--green)}
+  .eq-stages{display:flex;gap:5px;flex-wrap:wrap;flex:1}
+  .eq-mini{height:6px;border-radius:999px;background:#ECEEF0;overflow:hidden;width:90px;margin-top:5px}
+  .eq-mini>span{display:block;height:100%;background:var(--or);border-radius:999px;transition:width .3s}
+  .eq-card.done .eq-mini>span{background:var(--green)}
+
+  .qa-panel{border:1px solid var(--or);border-radius:10px;background:#FFFCFA;padding:12px 14px;margin:-2px 0 10px;animation:fade .15s ease}
+  .qa-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  .qa-top b{font-size:13.5px}
+  .qa-prog{font-size:12px;font-weight:800;color:var(--or-dark);background:var(--or-soft);padding:2px 9px;border-radius:999px}
+  .qa-prog.ok{color:var(--green);background:var(--green-soft)}
+  .qa-mini-btn{border:1px solid var(--line);background:#fff;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;color:var(--muted)}
+  .qa-mini-btn:hover{border-color:var(--or);color:var(--or-dark)}
+  .qa-grp{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--or-dark);margin:10px 0 4px;border-bottom:1px dashed var(--or-soft);padding-bottom:3px}
+  .qa-row{display:flex;align-items:flex-start;gap:9px;padding:6px 6px;border-radius:7px;cursor:pointer;text-transform:none;letter-spacing:0;font-weight:400;margin:0}
+  .qa-row:hover{background:#fff4ee}
+  .qa-row.on{background:#F0FBF3}
+  .qa-row input{width:auto;margin:2px 0 0;flex-shrink:0}
+  .qa-lbl{font-size:13px;color:var(--ink);line-height:1.3}
+  .qa-lbl small{display:block;font-size:11px;color:var(--muted);margin-top:1px}
+
+  /* DASHBOARD */
+  .dash-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px}
+  .dash-kpi{border:1px solid var(--line);border-radius:10px;padding:12px;text-align:center;background:linear-gradient(180deg,#fff,#FBFCFC)}
+  .dash-kpi .v{font-size:24px;font-weight:800;color:var(--or-dark);line-height:1}
+  .dash-kpi .v.green{color:var(--green)}
+  .dash-kpi .l{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin-top:4px}
+  .dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+  .dash-box{border:1px solid var(--line);border-radius:12px;padding:14px}
+  .dash-box h3{font-size:13px;color:var(--ink);margin-bottom:12px;display:flex;align-items:center;gap:7px}
+  .donut-wrap{display:flex;align-items:center;gap:16px}
+  .donut{width:108px;height:108px;border-radius:50%;position:relative;flex-shrink:0}
+  .donut::after{content:'';position:absolute;inset:24%;background:#fff;border-radius:50%}
+  .donut .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1}
+  .donut .ctr b{font-size:22px;font-weight:800;color:var(--ink);line-height:1}
+  .donut .ctr small{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .legend{display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+  .legend .it{display:flex;align-items:center;gap:7px}
+  .legend .sw{width:11px;height:11px;border-radius:3px;flex-shrink:0}
+  .legend .vv{margin-left:auto;font-weight:800;color:var(--ink)}
+  .bars{display:flex;flex-direction:column;gap:9px}
+  .bar-row{display:grid;grid-template-columns:115px 1fr 44px;align-items:center;gap:9px;font-size:12.5px}
+  .bar-row .nm{color:var(--muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar-row .track{height:14px;background:#ECEEF0;border-radius:999px;overflow:hidden}
+  .bar-row .track>span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--or),var(--or-dark));transition:width .4s}
+  .bar-row .track>span.green{background:linear-gradient(90deg,#22C55E,var(--green))}
+  .bar-row .vv{text-align:right;font-weight:800;color:var(--or-dark)}
+
+  .rackbar{background:linear-gradient(135deg,#334155,#1E293B);color:#fff;border-radius:10px;padding:12px 16px;font-weight:700;display:flex;align-items:center;gap:10px;justify-content:center;letter-spacing:.02em;box-shadow:var(--shadow)}
+  .rackbar .dotsq{width:10px;height:10px;background:var(--or);border-radius:2px;transform:rotate(45deg)}
+  .diagram{margin-top:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
+  .node{position:relative;border:2px solid var(--line);background:#fff;border-radius:10px;padding:14px 8px 11px;text-align:center;cursor:pointer;transition:all .18s;margin-top:14px}
+  .node::before{content:"";position:absolute;top:-14px;left:50%;width:2px;height:14px;background:var(--line);transform:translateX(-50%)}
+  .node .ico{font-size:20px}.node .nm{font-size:12px;font-weight:700;margin-top:4px;line-height:1.25}
+  .node .st{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-top:5px}
+  .node.cab{border-color:var(--green);background:var(--green-soft)}.node.cab::before{background:var(--green)}.node.cab .st{color:var(--green)}
+  .node:hover{border-color:var(--or);box-shadow:0 2px 8px rgba(242,101,34,.15)}
+
+  .ev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+  .ev-slot{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff;display:flex;flex-direction:column}
+  .ev-thumb{aspect-ratio:4/3;background:#0f172a;position:relative;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:13px;text-align:center;padding:8px}
+  .ev-thumb img{width:100%;height:100%;object-fit:cover}
+  .ev-thumb .ph{display:flex;flex-direction:column;align-items:center;gap:6px}.ev-thumb .ph .big{font-size:24px}
+  .ev-meta{padding:9px 11px;display:flex;align-items:center;gap:8px}.ev-meta .nm{font-size:13px;font-weight:700;flex:1;line-height:1.2}
+  .ev-tag{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;padding:2px 7px;border-radius:5px}
+  .ev-tag.ok{background:var(--green-soft);color:var(--green)}.ev-tag.no{background:#FEE2E2;color:var(--nc)}
+  .ev-del{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);border:none;color:#fff;border-radius:6px;width:26px;height:26px;font-size:14px;display:none}
+  .ev-slot.has .ev-del{display:block}
+
+  .multi-zone{border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+  .multi-zone h3{font-size:14px;display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .mz-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:10px}
+  .mz-photo{position:relative;border-radius:8px;overflow:hidden;border:1px solid var(--line);aspect-ratio:4/3;background:#0f172a}
+  .mz-photo img{width:100%;height:100%;object-fit:cover}
+  .mz-photo .del{position:absolute;top:5px;right:5px;background:rgba(0,0,0,.55);border:none;color:#fff;border-radius:5px;width:24px;height:24px;font-size:13px}
+  .mz-add{border:2px dashed var(--or);border-radius:8px;aspect-ratio:4/3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:var(--or-dark);background:var(--or-soft);cursor:pointer;font-weight:700;font-size:12px}
+
+  .qc-item{border:1px solid var(--line);border-radius:10px;margin-bottom:12px;overflow:hidden}
+  .qc-head{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#FAFBFB;cursor:pointer}
+  .qc-code{font-weight:800;color:var(--or-dark);font-size:13px;min-width:62px}
+  .qc-name{font-weight:700;flex:1}
+  .qc-score{font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px}
+  .qc-body{padding:6px 14px 14px;display:none}.qc-item.open .qc-body{display:block}
+  .qc-desc{border-top:1px dashed var(--line);padding:12px 0}.qc-desc:first-child{border-top:none}
+  .qc-desc p{margin:0 0 8px;font-size:13.5px;color:#374151}
+  .qc-desc .badge{font-size:11px;font-weight:800;color:#fff;padding:2px 7px;border-radius:6px;margin-right:8px}
+  .b1{background:var(--or)}.b2{background:#5B8DEF}.b3{background:#D9A93C}
+  .radioset{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .radioset label{margin:0;border:none;text-transform:none;font-size:13px;font-weight:700;color:var(--muted);padding:0;cursor:pointer;border-right:1px solid var(--line);letter-spacing:0}
+  .radioset label:last-child{border-right:none}.radioset input{display:none}
+  .radioset label span{display:block;padding:7px 13px;background:#fff}
+  .radioset input[value="C"]:checked+span{background:var(--c);color:#fff}
+  .radioset input[value="PC"]:checked+span{background:var(--pc);color:#fff}
+  .radioset input[value="NC"]:checked+span{background:var(--nc);color:#fff}
+
+  .note{background:#FFF8E6;border:1px solid #FCE9B8;border-radius:8px;padding:10px 12px;font-size:13px;color:#7A5B00}
+  .empty{color:var(--muted);font-size:14px;text-align:center;padding:24px}
+  .row-flex{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}.grow{flex:1;min-width:140px}
+  .small{font-size:12px;color:var(--muted)}
+  .auto-fill{font-size:10px;color:var(--or-dark);font-weight:700;background:var(--or-soft);padding:1px 6px;border-radius:5px;margin-left:6px}
+  .tag-asg{display:inline-flex;align-items:center;gap:6px;background:var(--or-soft);color:var(--or-dark);border:1px solid var(--or);border-radius:999px;padding:4px 6px 4px 11px;font-size:13px;font-weight:600}
+  .tag-asg button{border:none;background:rgba(209,78,18,.18);color:var(--or-dark);width:18px;height:18px;border-radius:50%;font-size:11px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .tag-asg button:hover{background:var(--or);color:#fff}
+
+  #reporte{display:none}
+  @media print{header,nav.tabs,.head-actions,.no-print,main{display:none!important}body{background:#fff}#reporte{display:block!important}}
+  #reporte .r-head{display:flex;align-items:center;gap:14px;border-bottom:3px solid var(--or);padding-bottom:14px;margin-bottom:18px}
+  #reporte .r-meta{margin-left:auto;text-align:right;font-size:12px;color:#555}
+  #reporte .r-sec{margin:20px 0;page-break-inside:avoid}
+  #reporte .r-sec h2{font-size:15px;color:var(--or-dark);border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em}
+  #reporte table{font-size:11.5px}#reporte th,#reporte td{padding:6px 8px}
+  #reporte .r-kpis{display:flex;gap:10px;flex-wrap:wrap}
+  #reporte .r-kpi{flex:1;min-width:100px;border:1px solid var(--line);border-radius:8px;padding:10px}
+  #reporte .r-kpi .v{font-size:22px;font-weight:800;color:var(--or-dark)}
+  #reporte .r-kpi .l{font-size:10px;text-transform:uppercase;color:#777;font-weight:700}
+  #reporte .r-info{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:12.5px}#reporte .r-info b{color:#555;font-weight:600}
+  #reporte .r-photos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  #reporte .r-photo{border:1px solid var(--line);border-radius:6px;overflow:hidden;page-break-inside:avoid}
+  #reporte .r-photo img{width:100%;height:120px;object-fit:cover;display:block}
+  #reporte .r-photo .cap{font-size:10px;padding:4px 6px;background:#FAFBFB}
+  .badge-st{font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;color:#fff}
+  .sec-row td{background:#FFF3EC;font-weight:800;color:var(--or-dark);text-transform:uppercase;font-size:10px;letter-spacing:.04em}
+  @page{margin:14mm}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-row" id="logoWrap"></div>
+  <div class="head-actions" style="position:absolute;right:18px;top:12px">
+    <input type="file" id="fileProyecto" accept=".json,application/json" hidden>
+    <input type="file" id="fileSesion" accept=".json,application/json" hidden>
+    <button class="btn" onclick="document.getElementById('fileSesion').click()">📂 Cargar avance</button>
+    <button class="btn" onclick="guardarSesion()">💾 Guardar</button>
+    <button class="btn primary" onclick="generarInforme()">📄 Informe PDF</button>
+  </div>
+</header>
+
+<nav class="tabs">
+  <div class="tabs-inner">
+    <button class="tab active" data-tab="proyecto"><span class="num">1</span> Proyecto</button>
+    <button class="tab" data-tab="avance"><span class="num">2</span> Avance</button>
+    <button class="tab" data-tab="calidad"><span class="num">3</span> Calidad</button>
+    <button class="tab" data-tab="fotos"><span class="num">4</span> Fotos</button>
+    <button class="tab" data-tab="cierre"><span class="num">5</span> Cierre</button>
+  </div>
+</nav>
+
+<main>
+
+<!-- 1. PROYECTO -->
+<section class="panel active" id="panel-proyecto">
+  <div class="card">
+    <div class="card-title-bar"><h2>📋 Datos del proyecto</h2><span class="pill or" id="pillEstado">Sin iniciar</span></div>
+    <p class="hint">Carga el <strong>Detalle de Proyecto</strong> (JSON). Dirección, ejecutivo comercial y los equipos (por sector) se traen automáticamente.</p>
+    <div style="margin-bottom:16px">
+      <button class="btn primary" style="background:var(--or);color:#fff;border-color:var(--or)" onclick="document.getElementById('fileProyecto').click()">⬆️ Cargar Detalle de Proyecto (.json)</button>
+      <span class="small" id="cargaInfo" style="margin-left:10px"></span>
+    </div>
+    <div class="grid c2">
+      <div><label>Nombre del proyecto</label><input id="p_nombre" oninput="dirty()"></div>
+      <div><label>Dirección <span class="auto-fill">del JSON</span></label><input id="p_direccion" oninput="dirty()"></div>
+      <div><label>Ejecutivo comercial <span class="auto-fill">del JSON</span></label><input id="p_ejecutivo" oninput="dirty()"></div>
+      <div><label>Estado general</label><select id="p_estadosel" onchange="dirty();renderEstado()"><option>Sin iniciar</option><option>En ejecución</option><option>En revisión QC</option><option>Finalizado</option></select></div>
+      <div><label>Fecha inicio instalación</label><input type="date" id="p_inicio" oninput="dirty();recalc()"></div>
+      <div><label>Fecha término instalación</label><input type="date" id="p_termino" oninput="dirty();recalc()"></div>
+      <div><label>Jefe de cuadrilla</label>
+        <select id="p_jefe" onchange="onJefeChange()">
+          <option value="">Seleccionar…</option>
+          <option>Francisco Morales</option><option>Nicolás Jara</option><option>Fabián Pavez</option>
+        </select>
+      </div>
+      <div><label>Técnicos asignados</label>
+        <select id="p_tecsel" onchange="addTecAsg(this.value)"><option value="">Agregar técnico…</option></select>
+        <div id="tecAsgTags" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="dashCard" style="display:none">
+    <div class="card-title-bar"><h2>📊 Dashboard del proyecto</h2><span class="pill or" id="dashEstado">—</span></div>
+    <div id="dashboard"></div>
+  </div>
+
+  <div class="card" id="importPreview" style="display:none">
+    <h2>🔍 Equipos detectados</h2>
+    <p class="hint">Equipos agrupados por sector. Cada unidad se sigue por separado. Verifica que coincida con tu levantamiento.</p>
+    <div id="importSummary" class="small" style="margin-bottom:10px"></div>
+    <div class="table-wrap"><table id="importTable"></table></div>
+    <div style="margin-top:12px">
+      <button class="btn primary" style="background:var(--or);color:#fff;border-color:var(--or)" onclick="confirmarImport()">✓ Importar equipos</button>
+      <button class="btn" style="border-color:var(--line);color:var(--muted);background:#fff" onclick="document.getElementById('importPreview').style.display='none'">Descartar</button>
+    </div>
+  </div>
+</section>
+
+<!-- 2. AVANCE -->
+<section class="panel" id="panel-avance">
+  <div class="card">
+    <div class="card-title-bar"><h2>📡 Avance de instalación</h2><span class="pill or" id="pillAvanceGlobal">0%</span></div>
+    <p class="hint">Cada equipo individual incluye su proceso completo: <b>Cable UTP → Montado → Conectado → Configurado → Probado</b>. Toca cada etapa para marcarla. Al tocar <b>Probado</b> se despliega el checklist de pruebas QA del equipo; cuando marcas todas, "Probado" queda en verde.</p>
+    <div class="progress" style="margin-bottom:6px"><span id="barAvance" style="width:0%"></span></div>
+    <div class="grid c4" style="margin-top:14px">
+      <div class="kpi"><span class="v" id="kEquipos">0</span><span class="l">Equipos (unidades)</span></div>
+      <div class="kpi"><span class="v" id="kCab">0%</span><span class="l">Cable UTP listo</span></div>
+      <div class="kpi"><span class="v" id="kListos">0</span><span class="l">Equipos 100%</span></div>
+      <div class="kpi"><span class="v" id="kAvance">0%</span><span class="l">Avance total</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title-bar"><h2>🔌 Equipos por sector</h2>
+      <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div><label style="margin-bottom:2px">Sector</label><input id="addEqSector" placeholder="Ej: Acceso Vehicular" style="width:150px"></div>
+        <div><label style="margin-bottom:2px">Equipo</label><input id="addEqName" placeholder="Ej: Barrera" style="width:140px"></div>
+        <div><label style="margin-bottom:2px">Cant.</label><input id="addEqQty" type="number" min="1" value="1" style="width:65px" class="center"></div>
+        <button class="addbtn" onclick="addEquipoManual()">+ Agregar</button>
+      </div>
+    </div>
+    <div id="equiposList"></div>
+    <div class="empty" id="equiposEmpty">No hay equipos. Carga el Detalle de Proyecto o agrégalos arriba.</div>
+  </div>
+</section>
+
+<!-- 3. CALIDAD -->
+<section class="panel" id="panel-calidad">
+  <div class="card">
+    <div class="card-title-bar"><h2>✅ Control de calidad</h2><span class="pill or" id="pillQC">0%</span></div>
+    <p class="hint">Evalúa cada punto: <b style="color:var(--c)">C</b> Conforme · <b style="color:var(--pc)">PC</b> Parcialmente Conforme · <b style="color:var(--nc)">NC</b> No Conforme. Puntaje por descripción: C=3, PC=1, NC=0 (máx 9 por ítem).</p>
+    <div class="progress" style="margin-bottom:6px"><span id="barQC" style="width:0%"></span></div>
+    <div class="grid c4" style="margin-top:14px">
+      <div class="kpi"><span class="v" id="qcPuntaje">0</span><span class="l">Puntaje total</span></div>
+      <div class="kpi"><span class="v" id="qcConf">0%</span><span class="l">Conformidad</span></div>
+      <div class="kpi"><span class="v" style="color:var(--nc)" id="qcNC">0</span><span class="l">No conformidades</span></div>
+      <div class="kpi"><span class="v" id="qcEval">0</span><span class="l">Ítems evaluados</span></div>
+    </div>
+  </div>
+  <div class="card"><div id="qcList"></div></div>
+</section>
+
+<!-- 5. FOTOS -->
+<section class="panel" id="panel-fotos">
+  <div class="card">
+    <h2>📷 Evidencia de instalación por equipo</h2>
+    <p class="hint">Cada equipo vendido aparece por sector. Una vez instalado, conectado y validado su funcionamiento, sube la foto del equipo terminado como respaldo de cómo quedó la instalación.</p>
+    <div class="note" style="margin-bottom:6px"><span id="evContador"></span></div>
+    <div id="evGroups"></div>
+    <div class="empty" id="evEmpty">No hay equipos. Cárgalos primero en Avance.</div>
+  </div>
+  <div class="card">
+    <h2>🧰 Otros respaldos</h2>
+    <p class="hint">Adjunta fotos de circuito eléctrico, conectividad a internet y cualquier otra evidencia.</p>
+    <div id="multiZones"></div>
+  </div>
+</section>
+
+<!-- 6. CIERRE -->
+<section class="panel" id="panel-cierre">
+  <div class="card">
+    <h2>⏱️ Tiempo de ejecución</h2>
+    <p class="hint">Días calendario = entre inicio y término. Días-hombre = suma de la cuadrilla.</p>
+    <div class="grid c3">
+      <div class="kpi"><span class="v" id="cDias">0</span><span class="l">Días calendario</span></div>
+      <div class="kpi"><span class="v" id="cTecnicos">0</span><span class="l">Técnicos</span></div>
+      <div class="kpi"><span class="v" id="cDiasHombre">0</span><span class="l">Días-hombre</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title-bar"><h2>👷 Cuadrilla técnica</h2><button class="addbtn" style="margin-left:auto" onclick="addTecnico()">+ Agregar técnico</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Técnico</th><th class="center" style="width:130px">Días trabajados</th><th></th></tr></thead><tbody id="tecBody"></tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="card-title-bar"><h2>📦 Insumos (cuantificación)</h2>
+      <button class="btn" style="border-color:var(--or);color:var(--or-dark);background:var(--or-soft)" onclick="sugerirInsumos()">✨ Sugerir según proyecto</button>
+      <button class="addbtn" onclick="addInsumo()">+ Agregar insumo</button>
+    </div>
+    <p class="hint">Cantidades aproximadas (uso interno, no se incluye en el informe al cliente).</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Insumo</th><th class="center" style="width:80px">Unidad</th><th class="center" style="width:90px">Cantidad</th><th class="center" style="width:110px">$ Unitario</th><th class="right" style="width:120px">Subtotal</th><th></th></tr></thead>
+      <tbody id="insBody"></tbody>
+      <tfoot><tr class="total-row"><td colspan="4">Total insumos</td><td class="right" id="insTotal">$ 0</td><td></td></tr></tfoot>
+    </table></div>
+  </div>
+  <div class="card"><h2>📝 Observaciones de cierre</h2><textarea id="cierreObs" placeholder="Pendientes, hallazgos, garantías, próximos pasos…" oninput="dirty()"></textarea></div>
+</section>
+
+</main>
+
+<div id="reporte"></div>
+<input type="file" id="fileEvidencia" accept="image/*" capture="environment" hidden>
+<input type="file" id="fileMulti" accept="image/*" multiple hidden>
+
+<script>
+const LOGO=`<div style="display:flex;align-items:center;gap:11px">
+<svg width="40" height="40" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="5" y="9" width="38" height="30" rx="7" fill="#fff"/>
+  <rect x="5" y="9" width="38" height="11" rx="7" fill="#F26522"/><rect x="5" y="14" width="38" height="6" fill="#F26522"/>
+  <circle cx="24" cy="29" r="6.5" fill="none" stroke="#F26522" stroke-width="3"/>
+  <path d="M21 29.2l2.1 2.1 4-4.4" stroke="#F26522" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+<div style="line-height:1"><div style="font-size:21px;font-weight:800;letter-spacing:-.02em;color:#fff">safecard</div>
+<div style="font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.85)">Seguimiento de Instalación</div></div></div>`;
+document.getElementById('logoWrap').innerHTML=LOGO;
+
+const QC_DEFS=[
+  {code:"QC-001",name:"Plan de diseño completo",d:["Se verificó que el diseño implementado cumple con las especificaciones acordadas con el cliente y se siguió el plan propuesto.","Se evaluó la coherencia entre el diseño y los requisitos del cliente, identificando posibles desviaciones.","Se revisó la documentación (archivo de redes) del diseño para asegurarse de que esté completa y actualizada."]},
+  {code:"QC-002",name:"Obra Civil y terminaciones",d:["Se inspeccionó la calidad de la obra civil, verificando la correcta ejecución de los acabados y terminaciones.","Se revisaron los registros de la obra civil para asegurarse de que se hayan cumplido los plazos y los estándares de calidad.","Se evaluó el estado de los elementos estructurales y se verificó que no haya daños o deficiencias en la obra."]},
+  {code:"QC-003",name:"Cumplimiento de alimentación eléctrica",d:["Se verificó que todos los equipos estén correctamente conectados a la alimentación eléctrica y no haya problemas de sobrecarga.","Se evaluó la calidad del suministro eléctrico, comprobando que cumpla con los estándares y normativas establecidos.","Se realizaron pruebas para asegurarse de que los sistemas de respaldo de energía estén funcionando correctamente."]},
+  {code:"QC-004",name:"Certificación de Cableado estructurado / conexión",d:["Se realizaron pruebas de conectividad para asegurarse de que el cableado estructurado esté correctamente instalado y cumpla con los estándares.","Se verificó que los cables estén debidamente etiquetados y documentados para facilitar su identificación y mantenimiento.","Se comprobó que las conexiones estén realizadas según las normativas y que no haya interferencias o pérdidas de señal."]},
+  {code:"QC-005",name:"Rotulado de cables/equipos",d:["Se revisó que todos los cables estén debidamente rotulados y que la información sea clara y legible.","Se verificó que los equipos y dispositivos estén correctamente identificados con etiquetas o placas informativas.","Se evaluó la consistencia del sistema de rotulación en toda la instalación, asegurando la uniformidad y facilitando la identificación."]},
+  {code:"QC-006",name:"Configuración y programación de equipos",d:["Se verificó que todos los equipos estén configurados correctamente según las especificaciones y requisitos del cliente.","Se comprobó que los equipos estén programados adecuadamente y que las funcionalidades requeridas estén activas.","Se revisó la compatibilidad entre los diferentes equipos y se realizaron pruebas de interoperabilidad."]},
+  {code:"QC-007",name:"Ubicación correcta de equipamientos y nomenclatura",d:["Se evaluó la ubicación de los equipamientos para asegurarse de que estén colocados correctamente según el diseño y los estándares.","Se verificó que la nomenclatura utilizada para identificar los equipamientos sea consistente y comprensible.","Se revisó la documentación y planos para asegurarse de que la ubicación de los equipamientos esté actualizada y registrada correctamente."]},
+  {code:"QC-008",name:"Operación correcta de equipamiento",d:["Se realizaron pruebas funcionales para garantizar que todos los equipos operen correctamente según sus especificaciones técnicas.","Se evaluó el desempeño de los equipos en condiciones normales de operación, identificando posibles fallos o deficiencias.","Se verificó que no haya errores de funcionamiento, mal funcionamiento o componentes defectuosos en los equipos."]},
+  {code:"QC-009",name:"Operación correcta de conectividad (internet, WiFi)",d:["Se comprobó que la conectividad a Internet esté funcionando correctamente en todos los dispositivos conectados, asegurando una velocidad y estabilidad adecuadas.","Se evaluó la calidad y alcance de la señal WiFi, asegurando una cobertura adecuada en todas las áreas requeridas.","Se realizaron pruebas de velocidad y latencia para asegurarse de que cumpla con los requisitos establecidos."]},
+  {code:"QC-010",name:"Limpieza y orden",d:["Se realizó una inspección visual para asegurarse de que el área esté limpia y ordenada, sin residuos ni obstrucciones.","Se verificó que no haya cables sueltos o desordenados, y que los equipos estén colocados correctamente en sus ubicaciones designadas.","Se evaluó el cumplimiento de los estándares de limpieza y orden establecidos, asegurando un entorno adecuado y seguro."]},
+];
+const INSTALL_STAGES=["Cable UTP","Montado","Conectado","Configurado","Probado"];
+
+/* ===== CATÁLOGO QA POR TIPO DE EQUIPO (resumen de Estándares de Calidad Safecard) ===== */
+const QA_GROUPS={
+  gabinete:{t:"Gabinete y cableado",x:[
+    ["Gabinete fijado y nivelado a la pared","visual"],["Equipos del gabinete conectados al UPS","mapa de energía"],
+    ["UPS con autonomía mínima de 30 min","simular corte"],["Cables rotulados en ambos extremos","visual"],
+    ["Puertos del switch etiquetados con su dispositivo","visual"],["UTP ordenado y fijado con bridas/canaleta","visual"],
+    ["Sin cables sueltos ni sin ductear","visual"],["Temperatura del gabinete ≤ 40°C","termómetro"]]},
+  red:{t:"Red y conectividad",x:[
+    ["Servidor local responde ping en la red","ping IP"],["Servidor con acceso a Internet","ping 8.8.8.8"],
+    ["Router 3G/5G con acceso a Internet","ping"],["Todos los dispositivos visibles en red local","ping a cada IP"],
+    ["Sin conflictos de IP","escáner de red"],["IPs coinciden con el Archivo de Redes","comparar planilla"],
+    ["Archivo de Redes en Drive actualizado","revisión Drive"]]},
+  wifi:{t:"Antenas WiFi",x:[
+    ["Antenas aparecen en el controlador WiFi","panel admin"],["Señal de dispositivos > -70 dBm","WiFi analyzer"],
+    ["Antenas punto a punto > -65 dBm","panel P2P"],["Throughput P2P > 10 Mbps","test velocidad"],
+    ["SSID Safecard oculto/separado","scanner WiFi"]]},
+  st_inst:{t:"Instalación física SafeTouch/iSafe",x:[
+    ["Instalado a altura correcta (1.3m peatonal / 1.0–2.5m vehicular)","huincha"],["Fijo, sin movimiento a presión lateral","manual"],
+    ["Carcasas correctas, sin daños","visual"],["Cable UTP protegido en canalización","visual"],
+    ["Sin cables expuestos al pilar/pared","visual"],["Pantalla sin manchas ni píxeles muertos","visual"],
+    ["Lector QR responde al acercar el teléfono","prueba teléfono"]]},
+  st_peat:{t:"Funcionamiento SafeTouch peatonal",x:[
+    ["Dispositivo en línea en la plataforma","plataforma"],["Apertura < 1 s tras lectura del QR","cronómetro"],
+    ["Rechaza QR inválido o vencido","QR incorrecto"],["Modo offline: abre sin Internet","simular corte"],
+    ["Antipassback activo (donde aplica)","doble entrada"],["Mensajes en pantalla correctos","visual"],
+    ["Buzzer suena al aprobar y rechazar","auditiva"]]},
+  st_veh:{t:"Funcionamiento SafeTouch/iSafe vehicular",x:[
+    ["Dispositivo en línea en la plataforma","plataforma"],["Barrera abre al presentar QR","prueba vehículo"],
+    ["Tres alturas responden por separado (donde aplica)","probar c/altura"],["Barrera cierra tras paso del vehículo","observar"],
+    ["Registra cada evento vehicular","log plataforma"]]},
+  lpr_inst:{t:"Instalación cámara LPR",x:[
+    ["Instalada a 1.5 m de altura","huincha"],["Ángulo horizontal ≤ 30°","nivel"],["Ángulo vertical ≤ 15°","nivel"],
+    ["Anclada sin vibración","manual"],["Entrada de cable sellada (exterior)","visual"],["IR nocturno enciende con poca luz","modo nocturno"]]},
+  lpr_lect:{t:"Calidad de lectura LPR",x:[
+    ["Tasa de lectura ≥ 95% (mín. 20 pruebas)","registrar"],["Sin lecturas falsas de carriles vecinos","carril contiguo"],
+    ["Lecturas nocturnas correctas","nocturno"],["Área de detección delimitada","interfaz cámara"],
+    ["Tiempo de procesamiento < 2 s","medir"],["Imágenes (vehículo/patente) se guardan","galería"],
+    ["Lecturas en tiempo real en plataforma","monitor"]]},
+  barr_inst:{t:"Instalación barrera",x:[
+    ["Base de hormigón curada y barrera nivelada","nivel"],["Pernos de anclaje apretados","torquímetro"],
+    ["Tierra (PE) < 1 Ohm","multímetro"],["Canalización sellada, profundidad ≥ 60 cm","doc. obra"],
+    ["Brazo alineado y paralelo al cerrar","visual"],["LED del brazo funciona (si aplica)","encender"]]},
+  barr_func:{t:"Funcionamiento barrera",x:[
+    ["Abre < 2 s con señal del controlador","cronómetro"],["Cierra tras paso (loop/temporizador)","vehículo prueba"],
+    ["Anti-aplastamiento detiene y revierte","obstáculo"],["Sin golpes ni ruidos anómalos (10 ciclos)","auditiva"],
+    ["Modo seguridad: abre ante corte de luz","simular corte"],["Relés de apertura/cierre activan barrera (5 ciclos)","plataforma"],
+    ["Log de eventos registrado","revisar registro"]]},
+  sg_inst:{t:"Instalación speedgate/torniquete",x:[
+    ["Unidades ancladas al suelo, sin movimiento","manual"],["Pedestales alineados y nivelados","nivel"],
+    ["Cableado protegido en canalización","visual"],["Sin cables expuestos","visual"],["Hojas abren/cierran sin obstrucción","manual"]]},
+  sg_func:{t:"Funcionamiento speedgate/torniquete",x:[
+    ["Hojas abren al validar QR","usuario autorizado"],["Hojas cierran tras el paso","medir cierre"],
+    ["Rechaza QR inválido (hojas cerradas)","QR incorrecto"],["Anti-aplastamiento activo","obstáculo"],
+    ["Modo emergencia: abren sin QR","simular corte"],["LED de estado correcto (verde/rojo)","visual"],
+    ["Apertura de hojas ≤ 1.5 s","cronómetro"],["Tiempo máx. de paso ≤ 5 s","cronómetro"],["Paso minusválidos ≥ 90 cm","huincha"]]},
+  rotul:{t:"Rotulación",x:[
+    ["Etiquetado según nomenclatura Safecard","visual"],["Cables etiquetados en ambos extremos","visual"],
+    ["Puertos del switch etiquetados","visual"]]},
+  app:{t:"App móvil Safecard",x:[
+    ["App disponible en App Store y Google Play","tiendas"],["Proyecto con nombre/imagen correctos","abrir app"],
+    ["Abre puertas/barreras desde la App","apertura remota"],["Genera QR de visita desde la App","generación QR"],
+    ["Funciona offline","datos desactivados"]]},
+  pc:{t:"Funcionamiento PC Guardia",x:[
+    ["Equipo enciende y arranca correctamente","visual"],["Accede a la plataforma Safecard","login web"],
+    ["Periféricos (monitor, teclado, red) funcionan","prueba"]]},
+  generic:{t:"Funcionamiento general",x:[
+    ["Equipo en línea en la plataforma","plataforma"],["Opera según especificación","prueba funcional"],["Sin daños visibles ni fallas","visual"]]}
+};
+function qaCatsFor(name){
+  const n=String(name||'').toLowerCase();
+  if(/safetouch|safe ?touch/.test(n)&&/veh|vehic|curvo|isafe/.test(n))return['st_inst','st_veh'];
+  if(/isafe/.test(n))return['st_inst','st_veh'];
+  if(/safetouch|safe ?touch/.test(n))return['st_inst','st_peat'];
+  if(/speedgate|torniquete|face ?id/.test(n))return['sg_inst','sg_func'];
+  if(/lpr|c[aá]mara/.test(n))return['lpr_inst','lpr_lect'];
+  if(/barrera/.test(n))return['barr_inst','barr_func'];
+  if(/antena|wifi|unifi|\bmap\b/.test(n))return['wifi'];
+  if(/switch/.test(n))return['gabinete','red','rotul'];
+  if(/servidor|router|internet/.test(n))return['red'];
+  if(/tablet/.test(n))return['app'];
+  if(/pc|guardia/.test(n))return['pc'];
+  return['generic'];
+}
+function qaTests(e){const out=[];qaCatsFor(e.nombre).forEach(cat=>{const g=QA_GROUPS[cat];if(!g)return;g.x.forEach((t,i)=>out.push({id:cat+'_'+i,cat,catTitle:g.t,label:t[0],hint:t[1]}));});return out;}
+function qaProgress(e){const t=qaTests(e);const done=t.filter(x=>e.qa&&e.qa[x.id]).length;return{done,total:t.length};}
+function recomputeProbado(e){const p=qaProgress(e);e.etapas[4]=p.total>0?(p.done===p.total):!!e.etapas[4];}
+const MULTI_CATS=[{id:"electrico",label:"⚡ Circuito eléctrico"},{id:"internet",label:"🌐 Internet / conectividad"},{id:"otros",label:"📎 Otros"}];
+
+const NAME_KEYS=['nombre','name','equipo','descripcion','description','item','producto','modelo'];
+const QTY_KEYS=['cantidad','qty','cant','unidades','count'];
+const SECTOR_KEYS=['sector','zona','area','acceso','recinto','ubicacionsector','grupo'];
+const SECTORNAME_KEYS=['sector','nombre','name','zona','area','acceso','titulo'];
+
+let state={proyecto:{},equipos:[],qc:{},fotos:[],tecnicos:[],insumos:[],cierreObs:""};
+let _id=0;const uid=()=>'x'+(++_id)+Date.now().toString(36);
+
+/* TABS */
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');document.getElementById('panel-'+t.dataset.tab).classList.add('active');
+  if(t.dataset.tab==='fotos')renderFotos();
+  if(t.dataset.tab==='cierre')recalc();
+  window.scrollTo({top:0,behavior:'smooth'});
+}));
+
+/* PROYECTO */
+const PF={p_nombre:'nombre',p_direccion:'direccion',p_ejecutivo:'ejecutivo',p_inicio:'inicio',p_termino:'termino'};
+function pullProyecto(){for(const[el,k]of Object.entries(PF))state.proyecto[k]=document.getElementById(el).value;state.proyecto.estado=document.getElementById('p_estadosel').value;state.proyecto.jefe=document.getElementById('p_jefe').value;}
+function pushProyecto(){for(const[el,k]of Object.entries(PF))document.getElementById(el).value=state.proyecto[k]||'';document.getElementById('p_estadosel').value=state.proyecto.estado||'Sin iniciar';document.getElementById('p_jefe').value=state.proyecto.jefe||'';renderEstado();renderTecAsg();}
+const TECNICOS=['Pedro Rivera','Matías Silva','Sebastián Espinoza','Ciro Forte','Ariel Lazo','Jhon Villegas'];
+function renderTecAsg(){
+  const sel=document.getElementById('p_tecsel'),tags=document.getElementById('tecAsgTags');if(!sel||!tags)return;
+  const asg=state.proyecto.tecnicosAsg||[];
+  sel.innerHTML='<option value="">Agregar técnico…</option>'+TECNICOS.filter(n=>!asg.includes(n)).map(n=>`<option>${n}</option>`).join('');
+  sel.value='';
+  tags.innerHTML=asg.length?asg.map(n=>`<span class="tag-asg">${esc(n)}<button onclick="removeTecAsg('${esc(n)}')" title="Quitar">✕</button></span>`).join(''):'<span class="small">Ninguno asignado aún.</span>';
+}
+function addTecAsg(n){if(!n)return;state.proyecto.tecnicosAsg=state.proyecto.tecnicosAsg||[];if(!state.proyecto.tecnicosAsg.includes(n))state.proyecto.tecnicosAsg.push(n);syncCuadrilla();renderTecAsg();renderTec();recalc();dirty();}
+function removeTecAsg(n){state.proyecto.tecnicosAsg=(state.proyecto.tecnicosAsg||[]).filter(x=>x!==n);syncCuadrilla();renderTecAsg();renderTec();recalc();dirty();}
+function syncCuadrilla(){
+  const asg=state.proyecto.tecnicosAsg||[];
+  const dias={};state.tecnicos.forEach(t=>{if(t.nombre)dias[t.nombre]=t.dias;});
+  const manual=state.tecnicos.filter(t=>t.nombre&&!TECNICOS.includes(t.nombre));
+  const fromAsg=asg.map(n=>({id:uid(),nombre:n,dias:dias[n]!==undefined?dias[n]:1}));
+  state.tecnicos=[...fromAsg,...manual];
+}
+function renderEstado(){document.getElementById('pillEstado').textContent=document.getElementById('p_estadosel').value;}
+
+document.getElementById('fileProyecto').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{parseDetalle(JSON.parse(r.result),f.name);}catch(err){alert('No se pudo leer el JSON: '+err.message);}};r.readAsText(f);e.target.value='';});
+
+/* ---- PARSER POR SECTOR ---- */
+function esStr(v){return v!==null&&v!==undefined&&typeof v!=='object';}
+function getKey(o,keys){for(const k in o){const lk=k.toLowerCase();if(keys.some(t=>lk===t||lk.includes(t)))return o[k];}return undefined;}
+function pickStr(o,keys){const v=getKey(o,keys);return (v!==undefined&&esStr(v))?String(v):'';}
+function toNum(v){if(typeof v==='number')return v;if(v===undefined||v===null)return 0;const n=parseFloat(String(v).replace(/[^\d.,-]/g,'').replace(',','.'));return isNaN(n)?0:n;}
+function esc(s){return String(s==null?'':s).replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+
+function childEquipArray(o){ // devuelve el primer array hijo de objetos-equipo
+  for(const k in o){const v=o[k];
+    if(Array.isArray(v)){const objs=v.filter(x=>x&&typeof x==='object'&&!Array.isArray(x));
+      if(objs.length&&objs.filter(x=>pickStr(x,NAME_KEYS)).length>=Math.ceil(objs.length*0.6))return objs;}}
+  return null;
+}
+function childEquipMap(o){ // objeto {equipo:cantidad}
+  for(const k in o){const v=o[k];const lk=k.toLowerCase();
+    if(v&&typeof v==='object'&&!Array.isArray(v)&&(lk.includes('equipo')||lk.includes('item')||lk.includes('detalle'))){
+      const vals=Object.values(v);if(vals.length&&vals.every(x=>esStr(x)&&!isNaN(toNum(x))))return v;}}
+  return null;
+}
+function walkArrays(node,cb,depth){depth=depth||0;if(depth>8)return;
+  if(Array.isArray(node)){cb(node);node.forEach(x=>{if(x&&typeof x==='object')walkArrays(x,cb,depth+1);});}
+  else if(node&&typeof node==='object'){for(const k in node)walkArrays(node[k],cb,depth+1);}
+}
+// Nombres legibles de las claves de equipo del Detalle de Proyecto
+const LABELS={
+  servidor_local_v2:'Servidor Local V2',servidor_local:'Servidor Local',internet:'Internet',
+  router_3g_5g:'Router 3G/5G',switch_8p:'Switch 8P',switch_4p:'Switch 4P',switch_16p:'Switch 16P',switch_24p:'Switch 24P',
+  antena_wifi_unifi:'Antena WiFi Unifi',antena_wifi_map:'Antena WiFi mAP',antena_unifi:'Antena Unifi',
+  safetouch_veh_curvo:'Safetouch Veh. Curvo',safetouch_veh_recto:'Safetouch Veh. Recto',safetouch_interior:'Safetouch Interior',
+  camara_lpr:'Cámara LPR Hikvision',barrera_zkteco:'Barrera Zkteco',pc_guardia:'PC Guardia',tablet_zebra:'Tablet Zebra',
+  face_id_speedgate:'Face Id Speedgate',speedgate_doble:'Speedgate Doble',speedgate:'Speedgate',
+  isafe:'iSafe',poste_isafe:'Poste iSafe',ups:'UPS',nvr:'NVR',dvr:'DVR'
+};
+function humanize(key){
+  if(LABELS[key])return LABELS[key];
+  const tok={'3g':'3G','5g':'5G','8p':'8P','4p':'4P','16p':'16P','24p':'24P','2p':'2P','lpr':'LPR','pc':'PC','wifi':'WiFi','map':'mAP','unifi':'Unifi','v2':'V2','v3':'V3','id':'Id','ip':'IP','poe':'PoE','ups':'UPS','qr':'QR','nvr':'NVR','dvr':'DVR','zkteco':'Zkteco'};
+  return String(key).split('_').map(w=>tok[w]||(w.charAt(0).toUpperCase()+w.slice(1))).join(' ');
+}
+function extractEquipos(data){
+  let res=[];
+  const st=(data&&data.state)?data.state:data;
+  const pushSector=sec=>{
+    if(!sec||!sec.items||typeof sec.items!=='object')return;
+    const name=sec.name||sec.nombre||'Sector';
+    for(const key in sec.items){const qty=toNum(sec.items[key])||0;if(qty>0)res.push({sector:name,name:humanize(key),qty});}
+  };
+  // Formato Safecard: baseSector + sectors[]
+  if(st&&(st.baseSector||Array.isArray(st.sectors))){
+    if(st.baseSector)pushSector(st.baseSector);
+    if(Array.isArray(st.sectors))st.sectors.forEach(pushSector);
+    if(res.length)return res;
+  }
+  // Fallback genérico: arreglo de sectores con items (array o mapa)
+  walkArrays(data,arr=>{
+    if(res.length)return;
+    const objs=arr.filter(x=>x&&typeof x==='object'&&!Array.isArray(x));
+    if(objs.length<1)return;
+    const sectorObjs=objs.filter(o=>pickStr(o,SECTORNAME_KEYS)&&(childEquipArray(o)||childEquipMap(o)));
+    if(sectorObjs.length>=1&&sectorObjs.length>=Math.floor(objs.length*0.5)){
+      objs.forEach(o=>{
+        const sector=pickStr(o,SECTORNAME_KEYS)||'General';const ca=childEquipArray(o),cm=childEquipMap(o);
+        if(ca)ca.forEach(it=>{const n=pickStr(it,NAME_KEYS);if(n)res.push({sector,name:n,qty:toNum(getKey(it,QTY_KEYS))||1});});
+        else if(cm)for(const k in cm)res.push({sector,name:humanize(k),qty:toNum(cm[k])||1});
+      });
+    }
+  });
+  if(res.length)return res;
+  // Fallback: arreglo plano de equipos
+  let best=null;
+  walkArrays(data,arr=>{const objs=arr.filter(x=>x&&typeof x==='object'&&!Array.isArray(x));const equipLike=objs.filter(o=>pickStr(o,NAME_KEYS)&&(getKey(o,QTY_KEYS)!==undefined||pickStr(o,SECTOR_KEYS)));if(equipLike.length>=(best?best.length:2)&&equipLike.length>=Math.ceil(objs.length*0.5))best=equipLike;});
+  if(best){best.forEach(o=>{const n=pickStr(o,NAME_KEYS);if(!n)return;res.push({sector:pickStr(o,SECTOR_KEYS)||'General',name:n,qty:toNum(getKey(o,QTY_KEYS))||1});});}
+  return res;
+}
+
+let _importRows=[];
+function parseDetalle(data,fname){
+  const F=(data&&data.fields)?data.fields:{};
+  const flat=flattenStrings(data);
+  const guess=keys=>{for(const k of keys){const h=flat.find(m=>m.key.toLowerCase().includes(k)&&String(m.val).trim()!=='');if(h)return h.val;}return'';};
+  // Nombre
+  const nombre=F.p_rec||F.p_nombre||guess(['p_rec','recinto','nombreproyecto','proyecto','project','obra'])||fname.replace(/\.json$/i,'');
+  if(nombre)document.getElementById('p_nombre').value=nombre;
+  // Dirección compuesta: dir + comuna + región
+  const dirP=(F.p_dir||guess(['p_dir','direccion','address'])||'').trim();
+  const comuna=(F.p_com||guess(['p_com','comuna'])||'').trim();
+  const region=(F.p_reg||guess(['p_reg','region','región'])||'').trim();
+  const dir=[dirP,comuna,region].filter(x=>x&&x!=='').join(', ');
+  if(dir)document.getElementById('p_direccion').value=dir;
+  // Ejecutivo comercial
+  const eje=F.p_ej||guess(['p_ej','ejecutivocomercial','ejecutivo','vendedor','comercial']);
+  if(eje&&/[a-záéíóúñ]/i.test(String(eje)))document.getElementById('p_ejecutivo').value=eje;
+  // Plan técnico (para sugerir insumos con datos reales)
+  state.techPlan={utp:toNum(F.t_utp),fibra:toNum(F.t_fibra),emt:toNum(F.t_emt),pvc:toNum(F.t_pvc)};
+
+  const rows=extractEquipos(data);
+  pullProyecto();
+  if(rows.length===0){document.getElementById('cargaInfo').textContent='✓ Datos cargados. No se detectaron equipos automáticamente; agrégalos en Avance.';document.getElementById('importPreview').style.display='none';pushProyecto();return;}
+  _importRows=rows;
+  // agrupar por sector para la vista previa
+  const map=new Map();rows.forEach(r=>{if(!map.has(r.sector))map.set(r.sector,[]);map.get(r.sector).push(r);});
+  let idx=0,html='<thead><tr><th><input type="checkbox" id="impAll" checked onchange="toggleImpAll(this)"></th><th>Equipo</th><th class="center">Cant.</th></tr></thead><tbody>';
+  let totalUnid=0;
+  map.forEach((items,sector)=>{
+    html+=`<tr class="sec-row"><td></td><td colspan="2">${esc(sector)}</td></tr>`;
+    items.forEach(r=>{totalUnid+=r.qty;html+=`<tr><td class="center"><input type="checkbox" class="impChk" data-i="${idx}" checked></td>
+      <td><input value="${esc(r.name)}" data-f="name" data-i="${idx}"></td>
+      <td class="center" style="width:80px"><input type="number" min="1" value="${r.qty}" class="center" data-f="qty" data-i="${idx}"></td></tr>`;idx++;});
+  });
+  document.getElementById('importTable').innerHTML=html+'</tbody>';
+  document.getElementById('importSummary').innerHTML=`<b>${totalUnid}</b> unidades · <b>${rows.length}</b> tipos · <b>${map.size}</b> sectores`;
+  document.getElementById('importPreview').style.display='block';
+  document.getElementById('cargaInfo').textContent=`✓ "${fname}" leído.`;
+  pushProyecto();dirty();
+}
+function toggleImpAll(cb){document.querySelectorAll('.impChk').forEach(c=>c.checked=cb.checked);}
+function confirmarImport(){
+  const t=document.getElementById('importTable');
+  t.querySelectorAll('input[data-f="name"]').forEach(i=>_importRows[i.dataset.i].name=i.value);
+  t.querySelectorAll('input[data-f="qty"]').forEach(i=>_importRows[i.dataset.i].qty=toNum(i.value)||1);
+  let added=0;
+  t.querySelectorAll('.impChk').forEach(c=>{if(c.checked){const r=_importRows[c.dataset.i];expandEquipo(r.name,r.qty,r.sector);added+=r.qty;}});
+  document.getElementById('importPreview').style.display='none';
+  renderEquipos();renderFotos();recalc();
+  alert(added+' unidades importadas.');
+  document.querySelector('.tab[data-tab="avance"]').click();
+}
+function flattenStrings(node,path='',out=[],depth=0){if(depth>8)return out;if(node&&typeof node==='object'){for(const k in node){const v=node[k];if(esStr(v))out.push({key:path?path+'.'+k:k,val:v});else flattenStrings(v,path?path+'.'+k:k,out,depth+1);}}return out;}
+
+/* EQUIPOS */
+function expandEquipo(base,qty,sector){for(let i=1;i<=qty;i++)state.equipos.push(newUnit(base,qty>1?base+' '+i:base,sector||'General'));}
+function newUnit(base,nombre,sector){return{id:uid(),base:base,nombre:nombre,sector:sector||'General',etapas:INSTALL_STAGES.map(()=>false),qa:{}};}
+function addEquipoManual(){
+  const nm=document.getElementById('addEqName').value.trim();const sec=document.getElementById('addEqSector').value.trim()||'General';const q=toNum(document.getElementById('addEqQty').value)||1;
+  if(!nm){alert('Indica el equipo.');return;}
+  expandEquipo(nm,q,sec);
+  document.getElementById('addEqName').value='';document.getElementById('addEqQty').value=1;
+  renderEquipos();renderFotos();recalc();dirty();
+}
+function delUnit(id){state.equipos=state.equipos.filter(e=>e.id!==id);state.fotos=state.fotos.filter(f=>f.equipoId!==id);renderEquipos();renderFotos();recalc();dirty();}
+function bySector(){const m=new Map();state.equipos.forEach(e=>{const s=e.sector||'General';if(!m.has(s))m.set(s,[]);m.get(s).push(e);});return m;}
+let qaUnitOpen=new Set();
+function renderEquipos(){
+  const c=document.getElementById('equiposList');
+  document.getElementById('equiposEmpty').style.display=state.equipos.length?'none':'block';
+  c.innerHTML='';
+  bySector().forEach((items,sector)=>{
+    const total=items.length*INSTALL_STAGES.length;
+    const done=items.reduce((a,e)=>a+e.etapas.filter(Boolean).length,0);
+    const secPct=total?Math.round(done/total*100):0;
+    const h=document.createElement('div');h.className='sector-head';
+    h.innerHTML=`<span class="nm">${esc(sector)}</span><span class="badge">${items.length} equipo(s) · ${secPct}%</span>
+      <div class="eq-mini" style="width:120px;margin-top:0"><span style="width:${secPct}%;background:var(--or)"></span></div>`;
+    c.appendChild(h);
+    items.forEach(e=>{
+      if(!e.qa)e.qa={};
+      const d=e.etapas.filter(Boolean).length, n=INSTALL_STAGES.length;
+      const pct=Math.round(d/n*100);
+      const cls=d===n?'done':(d>0?'partial':'');
+      const qp=qaProgress(e);
+      const prevDone=e.etapas.slice(0,4).every(Boolean);
+      let chips='';
+      for(let i=0;i<4;i++){chips+=`<span class="stage ${e.etapas[i]?'on':''}" onclick="toggleStage('${e.id}',${i})">${e.etapas[i]?'✓ ':''}${INSTALL_STAGES[i]}</span>`;}
+      chips+=`<button class="stage stage-all ${prevDone?'on':''}" onclick="markPrev('${e.id}')" title="Marcar Cable UTP, Montado, Conectado y Configurado">${prevDone?'✓ ':'⏩ '}Todo previo</button>`;
+      chips+=`<span class="stage ${e.etapas[4]?'on':''}" onclick="toggleQA('${e.id}')" title="Ver pruebas QA">${e.etapas[4]?'✓ ':''}Probado <small style="opacity:.85">(${qp.done}/${qp.total})</small> ▾</span>`;
+      const card=document.createElement('div');card.className='eq-card '+cls;
+      card.innerHTML=`<div class="eq-info ${cls}">
+          <div class="nm">${esc(e.nombre)}</div>
+          <div class="pct"><b>${d}/${n}</b> · ${pct}%${d===n?' ✓':''}</div>
+          <div class="eq-mini"><span style="width:${pct}%"></span></div>
+        </div>
+        <div class="eq-stages">${chips}</div>
+        <button class="iconbtn" onclick="delUnit('${e.id}')" title="Eliminar">🗑</button>`;
+      c.appendChild(card);
+      if(qaUnitOpen.has(e.id)){const pan=document.createElement('div');pan.innerHTML=qaPanelHtml(e);c.appendChild(pan.firstChild);}
+    });
+  });
+}
+function qaPanelHtml(e){
+  const tests=qaTests(e),p=qaProgress(e);
+  const groups={};tests.forEach(t=>{(groups[t.catTitle]=groups[t.catTitle]||[]).push(t);});
+  let h=`<div class="qa-panel"><div class="qa-top"><b>🧪 Pruebas QA · ${esc(e.nombre)}</b>
+    <span class="qa-prog ${(p.total&&p.done===p.total)?'ok':''}">${p.done}/${p.total}</span>
+    <button class="qa-mini-btn" onclick="qaAll('${e.id}',true)">Marcar todas</button>
+    <button class="qa-mini-btn" onclick="qaAll('${e.id}',false)">Limpiar</button>
+    <button class="qa-mini-btn" onclick="toggleQA('${e.id}')">Cerrar ✕</button></div>`;
+  for(const g in groups){
+    h+=`<div class="qa-grp">${esc(g)}</div>`;
+    groups[g].forEach(t=>{const on=!!e.qa[t.id];
+      h+=`<label class="qa-row ${on?'on':''}"><input type="checkbox" ${on?'checked':''} onchange="setQATest('${e.id}','${t.id}',this.checked)"><span class="qa-lbl">${esc(t.label)}<small>${esc(t.hint)}</small></span></label>`;});
+  }
+  return h+`</div>`;
+}
+function toggleQA(id){if(qaUnitOpen.has(id))qaUnitOpen.delete(id);else qaUnitOpen.add(id);renderEquipos();}
+function setQATest(id,testId,checked){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.qa=e.qa||{};if(checked)e.qa[testId]=true;else delete e.qa[testId];recomputeProbado(e);renderEquipos();recalc();dirty();}
+function qaAll(id,val){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.qa=e.qa||{};qaTests(e).forEach(t=>{if(val)e.qa[t.id]=true;else delete e.qa[t.id];});recomputeProbado(e);renderEquipos();recalc();dirty();}
+function setUnit(id,f,v){const e=state.equipos.find(x=>x.id===id);if(!e)return;e[f]=v;renderFotos();dirty();}
+function toggleStage(id,i){const e=state.equipos.find(x=>x.id===id);e.etapas[i]=!e.etapas[i];renderEquipos();recalc();dirty();}
+function markPrev(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;const all=e.etapas.slice(0,4).every(Boolean);for(let i=0;i<4;i++)e.etapas[i]=!all;renderEquipos();recalc();dirty();}
+
+/* CALIDAD */
+let qcOpen=new Set();
+const JEFE_NAMES=['Francisco Morales','Nicolás Jara','Fabián Pavez'];
+function applyJefeToQC(){const j=state.proyecto.jefe||'';QC_DEFS.forEach(d=>{const q=state.qc[d.code];if(!q)return;if(!q.resp||JEFE_NAMES.includes(q.resp))q.resp=j;});}
+function onJefeChange(){state.proyecto.jefe=document.getElementById('p_jefe').value;applyJefeToQC();renderQC();dirty();}
+function toggleQC(code,el){el.classList.toggle('open');if(el.classList.contains('open'))qcOpen.add(code);else qcOpen.delete(code);}
+function renderQC(){
+  const c=document.getElementById('qcList');c.innerHTML='';
+  const jefe=state.proyecto.jefe||'';
+  QC_DEFS.forEach(def=>{
+    if(!state.qc[def.code])state.qc[def.code]={resp:'',evals:[null,null,null],obs:''};
+    const q=state.qc[def.code];if(!q.resp&&jefe)q.resp=jefe;
+    const{pts,max}=qcScore(q);const conf=max?Math.round(pts/max*100):0;
+    const col=conf>=80?'var(--c)':conf>=50?'var(--pc)':(max?'var(--nc)':'var(--pend)');
+    const open=qcOpen.has(def.code);
+    const item=document.createElement('div');item.className='qc-item'+(open?' open':'');item.dataset.code=def.code;
+    item.innerHTML=`<div class="qc-head" onclick="toggleQC('${def.code}',this.parentElement)"><span class="qc-code">${def.code}</span><span class="qc-name">${def.name}</span><span class="qc-score" style="background:${col}22;color:${col}">${max?conf+'% · '+pts+'/'+max:'pendiente'}</span><span style="color:var(--muted)">▾</span></div>
+      <div class="qc-body"><div style="margin-bottom:6px;max-width:340px"><label>Responsable</label><input value="${esc(q.resp)}" onchange="setQC('${def.code}','resp',this.value)"></div>
+      ${def.d.map((txt,i)=>`<div class="qc-desc"><p><span class="badge b${i+1}">Descripción ${i+1}</span>${txt}</p>
+        <div class="radioset">${['C','PC','NC'].map(v=>`<label><input type="radio" name="${def.code}_${i}" value="${v}" ${q.evals[i]===v?'checked':''} onchange="setEval('${def.code}',${i},'${v}')"><span>${v}</span></label>`).join('')}</div>
+        ${q.evals[i]?`<button class="iconbtn" style="margin-left:8px;width:auto;padding:0 10px;font-size:12px" onclick="setEval('${def.code}',${i},null)">limpiar</button>`:''}</div>`).join('')}
+      <div style="margin-top:8px"><label>Observaciones / hallazgos</label><textarea onchange="setQC('${def.code}','obs',this.value)">${esc(q.obs)}</textarea></div></div>`;
+    c.appendChild(item);
+  });
+}
+function qcScore(q){let pts=0,max=0;q.evals.forEach(v=>{if(v){max+=3;pts+=v==='C'?3:v==='PC'?1:0;}});return{pts,max};}
+function setEval(code,i,v){qcOpen.add(code);state.qc[code].evals[i]=v;renderQC();recalc();dirty();}
+function setQC(code,f,v){state.qc[code][f]=v;recalc();dirty();}
+
+/* FOTOS */
+let _evTarget=null,_multiTarget=null;
+function renderFotos(){
+  document.getElementById('evEmpty').style.display=state.equipos.length?'none':'block';
+  const conPhoto=state.equipos.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
+  document.getElementById('evContador').textContent=`Evidencia: ${conPhoto}/${state.equipos.length} equipos con foto. Las imágenes se comprimen automáticamente.`;
+  const cont=document.getElementById('evGroups');cont.innerHTML='';
+  bySector().forEach((items,sector)=>{
+    const h=document.createElement('div');h.className='sector-head';
+    const ok=items.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
+    h.innerHTML=`<span class="nm">${esc(sector)}</span><span class="badge">${ok}/${items.length} con foto</span>`;
+    cont.appendChild(h);
+    const g=document.createElement('div');g.className='ev-grid';
+    items.forEach(e=>{
+      const foto=state.fotos.find(f=>f.equipoId===e.id);
+      const slot=document.createElement('div');slot.className='ev-slot'+(foto?' has':'');
+      slot.innerHTML=`<div class="ev-thumb" onclick="pedirEvidencia('${e.id}')">${foto?`<img src="${foto.data}">`:`<div class="ph"><span class="big">📸</span><span>Subir foto</span></div>`}${foto?`<button class="ev-del" onclick="event.stopPropagation();delFoto('${foto.id}')">✕</button>`:''}</div>
+        <div class="ev-meta"><span class="nm">${esc(e.nombre)}</span><span class="ev-tag ${foto?'ok':'no'}">${foto?'OK':'falta'}</span></div>`;
+      g.appendChild(slot);
+    });
+    cont.appendChild(g);
+  });
+  const mz=document.getElementById('multiZones');mz.innerHTML='';
+  MULTI_CATS.forEach(cat=>{const fotos=state.fotos.filter(f=>f.cat===cat.id);const div=document.createElement('div');div.className='multi-zone';
+    div.innerHTML=`<h3>${cat.label} <span class="small" style="font-weight:600">· ${fotos.length} foto(s)</span></h3><div class="mz-grid">${fotos.map(f=>`<div class="mz-photo"><img src="${f.data}"><button class="del" onclick="delFoto('${f.id}')">✕</button></div>`).join('')}<div class="mz-add" onclick="pedirMulti('${cat.id}')"><span style="font-size:22px">＋</span>Agregar</div></div>`;
+    mz.appendChild(div);});
+}
+function pedirEvidencia(id){_evTarget=id;document.getElementById('fileEvidencia').click();}
+function pedirMulti(cat){_multiTarget=cat;document.getElementById('fileMulti').click();}
+document.getElementById('fileEvidencia').addEventListener('change',e=>{const f=e.target.files[0];if(!f||!_evTarget)return;resizeImg(f,data=>{state.fotos=state.fotos.filter(x=>x.equipoId!==_evTarget);const eq=state.equipos.find(x=>x.id===_evTarget);state.fotos.push({id:uid(),cat:'equipo',equipoId:_evTarget,desc:eq?eq.nombre:'',data});renderFotos();dirty();});e.target.value='';});
+document.getElementById('fileMulti').addEventListener('change',e=>{[...e.target.files].forEach(f=>resizeImg(f,data=>{state.fotos.push({id:uid(),cat:_multiTarget,equipoId:null,desc:'',data});renderFotos();dirty();}));e.target.value='';});
+function resizeImg(file,cb){const r=new FileReader();r.onload=()=>{const img=new Image();img.onload=()=>{const max=1280;let w=img.width,h=img.height;if(w>max||h>max){const s=Math.min(max/w,max/h);w=Math.round(w*s);h=Math.round(h*s);}const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);cb(cv.toDataURL('image/jpeg',0.72));};img.src=r.result;};r.readAsDataURL(file);}
+function delFoto(id){state.fotos=state.fotos.filter(f=>f.id!==id);renderFotos();dirty();}
+
+/* CIERRE */
+function addTecnico(){state.tecnicos.push({id:uid(),nombre:'',dias:1});renderTec();recalc();dirty();}
+function delTec(id){state.tecnicos=state.tecnicos.filter(t=>t.id!==id);renderTec();recalc();dirty();}
+function renderTec(){const b=document.getElementById('tecBody');b.innerHTML='';if(!state.tecnicos.length){b.innerHTML='<tr><td colspan="3" class="empty">Sin técnicos. Agrega la cuadrilla.</td></tr>';return;}state.tecnicos.forEach(t=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input value="${esc(t.nombre)}" onchange="setTec('${t.id}','nombre',this.value)" placeholder="Nombre"></td><td class="center"><input type="number" min="0" step="0.5" value="${t.dias}" class="center" onchange="setTec('${t.id}','dias',this.value)"></td><td class="center"><button class="iconbtn" onclick="delTec('${t.id}')">🗑</button></td>`;b.appendChild(tr);});}
+function setTec(id,f,v){const t=state.tecnicos.find(x=>x.id===id);t[f]=f==='dias'?toNum(v):v;recalc();dirty();}
+function addInsumo(){state.insumos.push({id:uid(),nombre:'',unidad:'un',cant:0,precio:0});renderIns();recalc();dirty();}
+function delIns(id){state.insumos=state.insumos.filter(i=>i.id!==id);renderIns();recalc();dirty();}
+function renderIns(){const b=document.getElementById('insBody');b.innerHTML='';if(!state.insumos.length)b.innerHTML='<tr><td colspan="6" class="empty">Sin insumos. Usa "Sugerir según proyecto".</td></tr>';state.insumos.forEach(i=>{const sub=(i.cant||0)*(i.precio||0);const tr=document.createElement('tr');tr.innerHTML=`<td><input value="${esc(i.nombre)}" onchange="setIns('${i.id}','nombre',this.value)"></td><td class="center"><input value="${esc(i.unidad)}" class="center" onchange="setIns('${i.id}','unidad',this.value)"></td><td class="center"><input type="number" min="0" step="0.1" value="${i.cant}" class="center" onchange="setIns('${i.id}','cant',this.value)"></td><td class="center"><input type="number" min="0" value="${i.precio}" class="center" onchange="setIns('${i.id}','precio',this.value)"></td><td class="right">${money(sub)}</td><td class="center"><button class="iconbtn" onclick="delIns('${i.id}')">🗑</button></td>`;b.appendChild(tr);});}
+function setIns(id,f,v){const i=state.insumos.find(x=>x.id===id);i[f]=(f==='nombre'||f==='unidad')?v:toNum(v);renderIns();recalc();dirty();}
+function money(n){return '$ '+Math.round(n||0).toLocaleString('es-CL');}
+function sugerirInsumos(){const nEq=state.equipos.length;if(nEq===0){alert('Primero registra equipos en Avance.');return;}if(!confirm('Reemplazará la lista por una estimación según el proyecto. ¿Continuar?'))return;state.insumos=[];const add=(n,u,c)=>{if(c>0)state.insumos.push({id:uid(),nombre:n,unidad:u,cant:Math.ceil(c),precio:0});};const tp=state.techPlan||{};
+  add('Cable UTP Cat6','m',tp.utp||nEq*25);
+  add('Fibra óptica','m',tp.fibra||0);
+  add('Ducto EMT','m',tp.emt||0);
+  add('Ducto / canaleta PVC','m',tp.pvc||nEq*8);
+  add('Conectores RJ45','un',nEq*2+Math.ceil(nEq*0.1));
+  add('Patch cords','un',nEq);
+  add('Tarugos + tornillos','un',nEq*6);
+  add('Amarras / cintillos','un',nEq*6);
+  add('Etiquetas de rotulado','un',nEq*2);
+  add('Faceplate / jack','un',nEq);
+  renderIns();recalc();dirty();}
+
+/* RECALC */
+function recalc(){
+  pullProyecto();
+  let done=0,total=0;state.equipos.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
+  const av=total?Math.round(done/total*100):0;const tot=state.equipos.length;
+  const cabReady=state.equipos.filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
+  const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
+  setText('kEquipos',tot);setText('kCab',cabPct+'%');setText('kListos',listos+'/'+tot);setText('kAvance',av+'%');setText('pillAvanceGlobal',av+'%');document.getElementById('barAvance').style.width=av+'%';
+  let pts=0,max=0,nc=0,ev=0;QC_DEFS.forEach(d=>{const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;max+=s.max;if(s.max>0)ev++;q.evals.forEach(v=>{if(v==='NC')nc++;});});
+  const conf=max?Math.round(pts/max*100):0;setText('qcPuntaje',pts);setText('qcConf',conf+'%');setText('qcNC',nc);setText('qcEval',ev+'/'+QC_DEFS.length);setText('pillQC',conf+'%');document.getElementById('barQC').style.width=conf+'%';
+  const ini=document.getElementById('p_inicio').value,fin=document.getElementById('p_termino').value;let dias=0;if(ini&&fin){dias=Math.round((new Date(fin)-new Date(ini))/86400000)+1;if(dias<0)dias=0;}
+  const dh=state.tecnicos.reduce((a,t)=>a+(t.dias||0),0);setText('cDias',dias);setText('cTecnicos',state.tecnicos.length);setText('cDiasHombre',dh);
+  setText('insTotal',money(state.insumos.reduce((a,i)=>a+(i.cant||0)*(i.precio||0),0)));
+  renderDashboard();
+}
+function setText(id,v){const el=document.getElementById(id);if(el)el.textContent=v;}
+
+/* DASHBOARD */
+function donutHtml(segments,centerVal,centerLbl){
+  let acc=0,grad=[];const totalv=segments.reduce((a,s)=>a+s.v,0)||1;
+  segments.forEach(s=>{const from=acc/totalv*100,to=(acc+s.v)/totalv*100;grad.push(`${s.c} ${from}% ${to}%`);acc+=s.v;});
+  if(acc===0)grad=['#ECEEF0 0% 100%'];
+  return `<div class="donut-wrap"><div class="donut" style="background:conic-gradient(${grad.join(',')})"><div class="ctr"><b>${centerVal}</b><small>${centerLbl}</small></div></div>
+    <div class="legend">${segments.map(s=>`<div class="it"><span class="sw" style="background:${s.c}"></span>${esc(s.l)}<span class="vv">${s.v}</span></div>`).join('')}</div></div>`;
+}
+function barsHtml(rows,green){
+  if(!rows.length)return '<div class="small">Sin datos.</div>';
+  return `<div class="bars">${rows.map(r=>`<div class="bar-row"><span class="nm" title="${esc(r.nm)}">${esc(r.nm)}</span><div class="track"><span class="${green?'green':''}" style="width:${r.pct}%"></span></div><span class="vv">${r.pct}%</span></div>`).join('')}</div>`;
+}
+function renderDashboard(){
+  const dash=document.getElementById('dashboard');const card=document.getElementById('dashCard');if(!dash)return;
+  const N=state.equipos.length;
+  if(N===0){card.style.display='none';return;}
+  card.style.display='block';
+  document.getElementById('dashEstado').textContent=state.proyecto.estado||'Sin iniciar';
+  // avance
+  let done=0,total=0;state.equipos.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
+  const av=total?Math.round(done/total*100):0;
+  const completados=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
+  const sinIniciar=state.equipos.filter(e=>e.etapas.every(x=>!x)).length;
+  const enProceso=N-completados-sinIniciar;
+  // etapas
+  const stageCount=INSTALL_STAGES.map((_,i)=>state.equipos.filter(e=>e.etapas[i]).length);
+  // por sector
+  const secRows=[];bySector().forEach((items,sector)=>{const t=items.length*INSTALL_STAGES.length;const d=items.reduce((a,e)=>a+e.etapas.filter(Boolean).length,0);secRows.push({nm:sector,pct:t?Math.round(d/t*100):0});});
+  // QA
+  let qd=0,qt=0;state.equipos.forEach(e=>{const p=qaProgress(e);qd+=p.done;qt+=p.total;});
+  const qaPct=qt?Math.round(qd/qt*100):0;
+  // QC
+  let pts=0,max=0,nc=0;QC_DEFS.forEach(d=>{const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;max+=s.max;q.evals.forEach(v=>{if(v==='NC')nc++;});});
+  const conf=max?Math.round(pts/max*100):0;
+  // evidencia
+  const conFoto=state.equipos.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
+  const evPct=Math.round(conFoto/N*100);
+  // dias
+  const ini=state.proyecto.inicio,fin=state.proyecto.termino;let dias=0;if(ini&&fin){dias=Math.round((new Date(fin)-new Date(ini))/86400000)+1;if(dias<0)dias=0;}
+  const nTec=(state.proyecto.tecnicosAsg||[]).length||state.tecnicos.length;
+
+  dash.innerHTML=`
+    <div class="dash-kpis">
+      <div class="dash-kpi"><div class="v">${av}%</div><div class="l">Avance total</div></div>
+      <div class="dash-kpi"><div class="v ${completados===N?'green':''}">${completados}/${N}</div><div class="l">Equipos 100%</div></div>
+      <div class="dash-kpi"><div class="v">${qaPct}%</div><div class="l">Pruebas QA</div></div>
+      <div class="dash-kpi"><div class="v">${conf}%</div><div class="l">Conformidad QC</div></div>
+      <div class="dash-kpi"><div class="v">${evPct}%</div><div class="l">Evidencia fotos</div></div>
+      <div class="dash-kpi"><div class="v" style="color:${nc?'var(--nc)':'var(--green)'}">${nc}</div><div class="l">No conformidades</div></div>
+    </div>
+    <div class="dash-grid">
+      <div class="dash-box"><h3>🔧 Estado de equipos</h3>
+        ${donutHtml([{v:completados,c:'#16A34A',l:'Completados'},{v:enProceso,c:'#F26522',l:'En proceso'},{v:sinIniciar,c:'#CBD5E1',l:'Sin iniciar'}],av+'%','avance')}</div>
+      <div class="dash-box"><h3>📍 Avance por sector</h3>${barsHtml(secRows)}</div>
+      <div class="dash-box"><h3>🪜 Etapas completadas</h3>${barsHtml(INSTALL_STAGES.map((s,i)=>({nm:s,pct:Math.round(stageCount[i]/N*100)})),true)}</div>
+      <div class="dash-box"><h3>🧪 Pruebas QA y calidad</h3>
+        ${donutHtml([{v:qd,c:'#16A34A',l:'Pruebas QA hechas'},{v:Math.max(qt-qd,0),c:'#CBD5E1',l:'Pruebas pendientes'}],qaPct+'%','QA')}
+        <div class="bars" style="margin-top:12px">
+          <div class="bar-row"><span class="nm">Conformidad QC</span><div class="track"><span class="${conf>=80?'green':''}" style="width:${conf}%"></span></div><span class="vv">${conf}%</span></div>
+          <div class="bar-row"><span class="nm">Evidencia fotos</span><div class="track"><span class="green" style="width:${evPct}%"></span></div><span class="vv">${evPct}%</span></div>
+        </div></div>
+      <div class="dash-box"><h3>⏱️ Ejecución</h3>
+        <div class="dash-kpis" style="margin:0">
+          <div class="dash-kpi"><div class="v">${dias}</div><div class="l">Días</div></div>
+          <div class="dash-kpi"><div class="v">${nTec}</div><div class="l">Técnicos</div></div>
+          <div class="dash-kpi"><div class="v">${N}</div><div class="l">Equipos</div></div>
+        </div></div>
+    </div>`;
+}
+
+/* GUARDAR / CARGAR */
+let _dirty=false;function dirty(){_dirty=true;}
+function guardarSesion(){pullProyecto();state.cierreObs=document.getElementById('cierreObs').value;const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');const nm=(state.proyecto.nombre||'avance').replace(/[^\w\-]+/g,'_');a.href=URL.createObjectURL(blob);a.download='Seguimiento_'+nm+'_'+new Date().toISOString().slice(0,10)+'.json';a.click();_dirty=false;}
+document.getElementById('fileSesion').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);state=Object.assign({proyecto:{},equipos:[],qc:{},fotos:[],tecnicos:[],insumos:[],cierreObs:''},d);state.equipos.forEach(eq=>{if(!eq.id)eq.id=uid();if(!eq.sector)eq.sector='General';if(!Array.isArray(eq.etapas))eq.etapas=INSTALL_STAGES.map(()=>false);if(eq.etapas.length===4){eq.etapas=[!!eq.cableado,...eq.etapas];}if(eq.etapas.length!==INSTALL_STAGES.length){const n=INSTALL_STAGES.map((_,i)=>!!eq.etapas[i]);eq.etapas=n;}delete eq.cableado;if(!eq.qa)eq.qa={};recomputeProbado(eq);});renderAll();alert('Avance cargado.');}catch(err){alert('Archivo inválido: '+err.message);}};r.readAsText(f);e.target.value='';});
+
+/* INFORME PDF */
+function generarInforme(){
+  pullProyecto();state.cierreObs=document.getElementById('cierreObs').value;const p=state.proyecto;
+  const tot=state.equipos.length;
+  let done=0,tt=0;state.equipos.forEach(e=>{tt+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
+  const av=tt?Math.round(done/tt*100):0;const cabReady=state.equipos.filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
+  const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
+  let pts=0,max=0,nc=0;QC_DEFS.forEach(d=>{const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;max+=s.max;q.evals.forEach(v=>{if(v==='NC')nc++;});});
+  const conf=max?Math.round(pts/max*100):0;
+  const ini=p.inicio,fin=p.termino;let dias=0;if(ini&&fin){dias=Math.round((new Date(fin)-new Date(ini))/86400000)+1;if(dias<0)dias=0;}
+  const fmtD=d=>d?new Date(d+'T00:00').toLocaleDateString('es-CL'):'—';
+  const stB=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">C</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">PC</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">NC</span>':'<span style="color:#aaa">—</span>';
+  const nCols=INSTALL_STAGES.length+2;
+  let eqRows='';bySector().forEach((items,sector)=>{eqRows+=`<tr class="sec-row"><td colspan="${nCols}">${esc(sector)}</td></tr>`;items.forEach(e=>{eqRows+=`<tr><td>${esc(e.nombre)}</td>${e.etapas.map(s=>`<td class="center">${s?'✓':'—'}</td>`).join('')}<td class="center">${Math.round(e.etapas.filter(Boolean).length/INSTALL_STAGES.length*100)}%</td></tr>`;});});
+  let qcRows=QC_DEFS.map(d=>{const q=state.qc[d.code]||{evals:[null,null,null]};const s=qcScore(q);const cf=s.max?Math.round(s.pts/s.max*100):0;return `<tr><td>${d.code}</td><td>${d.name}</td><td class="center">${stB(q.evals[0])} ${stB(q.evals[1])} ${stB(q.evals[2])}</td><td class="center"><b>${s.max?cf+'%':'—'}</b></td></tr>`;}).join('');
+  const ncList=QC_DEFS.map(d=>({d,o:(state.qc[d.code]||{}).obs})).filter(x=>x.o);
+  let obsHtml=ncList.length?('<ul style="margin:0;padding-left:18px;font-size:12px">'+ncList.map(x=>`<li><b>${x.d.code}:</b> ${esc(x.o)}</li>`).join('')+'</ul>'):'<p class="small">Sin observaciones registradas.</p>';
+  const fotosOrd=[...state.equipos.map(e=>{const f=state.fotos.find(x=>x.equipoId===e.id);return f?{f,cap:e.sector+' · '+e.nombre}:null;}).filter(Boolean),...state.fotos.filter(f=>f.cat==='electrico').map(f=>({f,cap:'Circuito eléctrico'})),...state.fotos.filter(f=>f.cat==='internet').map(f=>({f,cap:'Internet / conectividad'})),...state.fotos.filter(f=>f.cat==='otros').map(f=>({f,cap:'Otros'}))];
+  let fotosHtml=fotosOrd.length?('<div class="r-photos">'+fotosOrd.map(o=>`<div class="r-photo"><img src="${o.f.data}"><div class="cap">${esc(o.cap)}</div></div>`).join('')+'</div>'):'<p class="small">Sin fotografías cargadas.</p>';
+  document.getElementById('reporte').innerHTML=`<div>
+    <div class="r-head"><div>${LOGO.replace(/#fff/g,'#F26522').replace(/rgba\(255,255,255,\.85\)/g,'#777').replace('color:#F26522">safecard','color:#1F2933">safecard')}</div>
+      <div class="r-meta"><b style="font-size:13px;color:#1F2933">INFORME DE INSTALACIÓN Y CONFORMIDAD</b><br>Emitido: ${new Date().toLocaleDateString('es-CL')}<br>Safecard Access Technologies</div></div>
+    <div class="r-sec"><h2>Datos del proyecto</h2><div class="r-info">
+      <div><b>Proyecto:</b> ${esc(p.nombre||'—')}</div><div><b>Dirección:</b> ${esc(p.direccion||'—')}</div>
+      <div><b>Ejecutivo comercial:</b> ${esc(p.ejecutivo||'—')}</div><div><b>Estado:</b> ${esc(p.estado||'—')}</div>
+      <div><b>Jefe de cuadrilla:</b> ${esc(p.jefe||'—')}</div><div><b>Periodo:</b> ${fmtD(ini)} – ${fmtD(fin)} (${dias} día/s)</div></div></div>
+    <div class="r-sec"><h2>Resumen de ejecución</h2><div class="r-kpis">
+      <div class="r-kpi"><div class="v">${av}%</div><div class="l">Avance total</div></div>
+      <div class="r-kpi"><div class="v">${cabPct}%</div><div class="l">Cableado</div></div>
+      <div class="r-kpi"><div class="v">${conf}%</div><div class="l">Conformidad QC</div></div>
+      <div class="r-kpi"><div class="v">${tot}</div><div class="l">Equipos</div></div>
+      <div class="r-kpi"><div class="v">${dias}</div><div class="l">Días</div></div>
+      <div class="r-kpi"><div class="v">${state.tecnicos.length}</div><div class="l">Técnicos</div></div></div></div>
+    <div class="r-sec"><h2>Estado de equipos instalados</h2><table><thead><tr><th>Equipo</th>${INSTALL_STAGES.map(s=>`<th class="center">${s}</th>`).join('')}<th class="center">Avance</th></tr></thead><tbody>${eqRows||`<tr><td colspan="${nCols}" class="center">Sin equipos</td></tr>`}</tbody></table></div>
+    <div class="r-sec"><h2>Control de calidad</h2><table><thead><tr><th>Ítem</th><th>Punto a revisar</th><th class="center">Evaluación (D1·D2·D3)</th><th class="center">Conformidad</th></tr></thead><tbody>${qcRows}</tbody></table><p style="font-size:11px;margin-top:6px;color:#777">No conformidades: <b style="color:#DC2626">${nc}</b> · Conformidad global: <b>${conf}%</b></p></div>
+    <div class="r-sec"><h2>Observaciones y hallazgos</h2>${obsHtml}${state.cierreObs?`<p style="font-size:12px;margin-top:8px"><b>Cierre:</b> ${esc(state.cierreObs)}</p>`:''}</div>
+    <div class="r-sec"><h2>Respaldo fotográfico</h2>${fotosHtml}</div>
+    <div style="margin-top:30px;display:flex;gap:40px;font-size:12px"><div style="flex:1;border-top:1px solid #999;padding-top:6px;text-align:center">Ejecutó (Safecard)</div><div style="flex:1;border-top:1px solid #999;padding-top:6px;text-align:center">Recibe conforme (Cliente)</div></div>
+  </div>`;
+  setTimeout(()=>window.print(),120);
+}
+
+function renderAll(){pushProyecto();renderEquipos();renderQC();renderFotos();renderTec();renderIns();document.getElementById('cierreObs').value=state.cierreObs||'';recalc();}
+window.addEventListener('beforeunload',e=>{if(_dirty){e.preventDefault();e.returnValue='';}});
+renderAll();
+</script>
+</body>
+</html>
