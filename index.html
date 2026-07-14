@@ -346,6 +346,10 @@
       <button class="btn primary" style="background:var(--or);color:#fff;border-color:var(--or)" onclick="registrarAvance()">＋ Registrar hoy</button>
     </div>
     <p class="small" id="bHoyInfo" style="margin-top:8px"></p>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px;border-top:1px dashed var(--line);padding-top:10px">
+      <button class="btn" style="border-color:var(--or);color:var(--or-dark);background:var(--or-soft)" onclick="syncNow(false)">☁️ Sincronizar al Panel</button>
+      <span class="small" id="bSyncStatus" style="font-weight:600">—</span>
+    </div>
   </div>
 
   <div class="card">
@@ -878,8 +882,8 @@ function recalc(){
   const cabReady=state.equipos.filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
   const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
   setText('kEquipos',tot);setText('kCab',cabPct+'%');setText('kListos',listos+'/'+tot);setText('kAvance',av+'%');setText('pillAvanceGlobal',av+'%');document.getElementById('barAvance').style.width=av+'%';
-  let pts=0,max=0,nc=0,ev=0;QC_DEFS.forEach(d=>{const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;max+=s.max;if(s.max>0)ev++;q.evals.forEach(v=>{if(v==='NC')nc++;});});
-  const conf=max?Math.round(pts/max*100):0;setText('qcPuntaje',pts);setText('qcConf',conf+'%');setText('qcNC',nc);setText('qcEval',ev+'/'+QC_DEFS.length);setText('pillQC',conf+'%');document.getElementById('barQC').style.width=conf+'%';
+  let pts=0,maxAll=0,nc=0,ev=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;if(s.max>0)ev++;q.evals.forEach(v=>{if(v==='NC')nc++;});});
+  const conf=maxAll?Math.round(pts/maxAll*100):0;setText('qcPuntaje',pts+' / '+maxAll);setText('qcConf',conf+'%');setText('qcNC',nc);setText('qcEval',ev+'/'+QC_DEFS.length);setText('pillQC',conf+'%');document.getElementById('barQC').style.width=conf+'%';
   const ini=document.getElementById('p_inicio').value,fin=document.getElementById('p_termino').value;let dias=0;if(ini&&fin){dias=Math.round((new Date(fin)-new Date(ini))/86400000)+1;if(dias<0)dias=0;}
   const dh=state.tecnicos.reduce((a,t)=>a+(t.dias||0),0);setText('cDias',dias);setText('cTecnicos',state.tecnicos.length);setText('cDiasHombre',dh);
   setText('insTotal',money(state.insumos.reduce((a,i)=>a+(i.cant||0)*(i.precio||0),0)));
@@ -919,8 +923,8 @@ function renderDashboard(){
   let qd=0,qt=0;state.equipos.forEach(e=>{const p=qaProgress(e);qd+=p.done;qt+=p.total;});
   const qaPct=qt?Math.round(qd/qt*100):0;
   // QC
-  let pts=0,max=0,nc=0;QC_DEFS.forEach(d=>{const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;max+=s.max;q.evals.forEach(v=>{if(v==='NC')nc++;});});
-  const conf=max?Math.round(pts/max*100):0;
+  let pts=0,maxAll=0,nc=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;q.evals.forEach(v=>{if(v==='NC')nc++;});});
+  const conf=maxAll?Math.round(pts/maxAll*100):0;
   // evidencia
   const conFoto=state.equipos.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
   const evPct=Math.round(conFoto/N*100);
@@ -969,8 +973,8 @@ function generarInforme(){
   let done=0,tt=0;state.equipos.forEach(e=>{tt+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
   const av=tt?Math.round(done/tt*100):0;const cabReady=state.equipos.filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
   const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
-  let pts=0,max=0,nc=0;QC_DEFS.forEach(d=>{const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;max+=s.max;q.evals.forEach(v=>{if(v==='NC')nc++;});});
-  const conf=max?Math.round(pts/max*100):0;
+  let pts=0,maxAll=0,nc=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;q.evals.forEach(v=>{if(v==='NC')nc++;});});
+  const conf=maxAll?Math.round(pts/maxAll*100):0;
   const ini=p.inicio,fin=p.termino;let dias=0;if(ini&&fin){dias=Math.round((new Date(fin)-new Date(ini))/86400000)+1;if(dias<0)dias=0;}
   const fmtD=d=>d?new Date(d+'T00:00').toLocaleDateString('es-CL'):'—';
   const stB=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">C</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">PC</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">NC</span>':'<span style="color:#aaa">—</span>';
@@ -1009,8 +1013,8 @@ function getStats(){
   const eq=state.equipos,tot=eq.length;let done=0,total=0;eq.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
   const avance=total?Math.round(done/total*100):0;
   const cab=eq.filter(e=>e.etapas[0]).length,cabPct=tot?Math.round(cab/tot*100):0;
-  let pts=0,max=0;QC_DEFS.forEach(d=>{const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;max+=s.max;});
-  const qcConf=max?Math.round(pts/max*100):0;
+  let pts=0,maxAll=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;pts+=qcScore(q).pts;});
+  const qcConf=maxAll?Math.round(pts/maxAll*100):0;
   let qd=0,qt=0;eq.forEach(e=>{const p=qaProgress(e);qd+=p.done;qt+=p.total;});
   const qaPct=qt?Math.round(qd/qt*100):0;
   return{tot,avance,cabPct,qcConf,qaPct};
@@ -1040,7 +1044,7 @@ function registrarAvance(){
   const now=new Date();const hora=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
   state.bitacora=state.bitacora||[];
   state.bitacora.push({id:uid(),fecha:f,hora,ts:Date.now(),avance:st.avance,cab:st.cabPct,qc:st.qcConf,qa:st.qaPct,por,nota});
-  document.getElementById('bNota').value='';renderBitacora();dirty();
+  document.getElementById('bNota').value='';renderBitacora();dirty();syncNow(true);
 }
 function delBitacora(id){if(!confirm('¿Eliminar este registro?'))return;state.bitacora=(state.bitacora||[]).filter(x=>(x.id||x.fecha)!==id);renderBitacora();dirty();}
 function renderBitacora(){
@@ -1096,7 +1100,78 @@ function bitChartSVG(sc){
 }
 function renderAll(){pushProyecto();renderEquipos();renderQC();renderFotos();renderTec();renderIns();document.getElementById('cierreObs').value=state.cierreObs||'';recalc();}
 window.addEventListener('beforeunload',e=>{if(_dirty){e.preventDefault();e.returnValue='';}});
+/* ===== SINCRONIZACIÓN AL PANEL (Firebase) ===== */
+function projId(){if(!state.proyecto.id){state.proyecto.id='p_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);dirty();}return state.proyecto.id;}
+function buildSnapshot(){
+  const st=getStats(),sc=scheduleCalc(),p=state.proyecto;
+  const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
+  const dh=state.tecnicos.reduce((a,t)=>a+(t.dias||0),0);
+  return{
+    id:projId(), nombre:p.nombre||document.getElementById('p_nombre').value||'(sin nombre)',
+    direccion:p.direccion||document.getElementById('p_direccion').value||'', comuna:p.comuna||'',
+    jefe:p.jefe||'', ejecutivo:p.ejecutivo||'',
+    inicio:p.inicio||'', termino:p.termino||'', plazo:p.plazo||'',
+    avance:st.avance, cabPct:st.cabPct, qcConf:st.qcConf, qaPct:st.qaPct,
+    equiposTotal:state.equipos.length, equiposListos:listos,
+    nTecnicos:state.tecnicos.length, diasHombre:dh,
+    estado: sc.ok?sc.estado:'Sin fechas',
+    diasRest: sc.ok?sc.diasRest:null, diasTrans: sc.ok?sc.diasTrans:null,
+    expected: sc.ok?sc.expected:null, gap: sc.ok?sc.gap:null,
+    updatedBy: p.jefe||''
+  };
+}
+function setSyncStatus(txt,color){const el=document.getElementById('bSyncStatus');if(el){el.textContent=txt;el.style.color=color||'var(--muted)';}}
+async function syncNow(silent){
+  if(!window.SafecardSync||!window.SafecardSync.enabled){setSyncStatus('⚠ Sincronización no configurada','var(--pc)');if(!silent)alert('La sincronización con el Panel aún no está configurada. Debes pegar la config de Firebase en este archivo (ver instrucciones del Panel de Control).');return;}
+  if(!state.equipos.length){setSyncStatus('Nada que sincronizar aún');return;}
+  try{
+    setSyncStatus('Sincronizando…','var(--or-dark)');
+    await window.SafecardSync.push(buildSnapshot());
+    const h=new Date();setSyncStatus('✓ Sincronizado '+String(h.getHours()).padStart(2,'0')+':'+String(h.getMinutes()).padStart(2,'0'),'var(--green)');
+  }catch(e){setSyncStatus('✗ Error al sincronizar: '+(e.message||e),'var(--nc)');}
+}
+window.addEventListener('safecard-sync-ready',()=>{if(state.equipos.length)syncNow(true);});
 renderAll();
+</script>
+
+<!-- ====== CONFIG FIREBASE (pega aquí la MISMA config del Panel de Control) ====== -->
+<script>
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAglD25oDQfpIBUcMpspe-9QT5JbKc_WQk",
+  authDomain: "dashboard-safecard.firebaseapp.com",
+  projectId: "dashboard-safecard",
+  storageBucket: "dashboard-safecard.firebasestorage.app",
+  messagingSenderId: "105572979218",
+  appId: "1:105572979218:web:0a92d9753fc4724eec3ecb"
+};
+</script>
+<script type="module">
+  const FB=window.FIREBASE_CONFIG;
+  if(FB && FB.apiKey){
+    try{
+      const {initializeApp}=await import("https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js");
+      const {getFirestore,doc,setDoc,serverTimestamp}=await import("https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js");
+      const {getAuth,signInAnonymously}=await import("https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js");
+      const app=initializeApp(FB);
+      const db=getFirestore(app);
+      const auth=getAuth(app);
+      signInAnonymously(auth).catch(e=>console.warn('Auth anónima falló:',e.code));
+      window.SafecardSync={
+        enabled:true,
+        async push(snap){
+          const ref=doc(db,'proyectos',snap.id);
+          await setDoc(ref, Object.assign({}, snap, {updatedAt: serverTimestamp()}), {merge:true});
+        }
+      };
+      window.dispatchEvent(new Event('safecard-sync-ready'));
+    }catch(e){
+      console.warn('Firebase no disponible:',e);
+      window.SafecardSync={enabled:false};
+    }
+  }else{
+    window.SafecardSync={enabled:false};
+    window.dispatchEvent(new Event('safecard-sync-ready'));
+  }
 </script>
 </body>
 </html>
