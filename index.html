@@ -89,7 +89,11 @@
   .stage-all:hover{background:var(--or-soft)}
   .stage-all.on{background:var(--green);border-color:var(--green);border-style:solid;color:#fff}
 
-  .eq-card{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-left:5px solid var(--pend);border-radius:10px;padding:11px 13px;margin-bottom:8px;background:#fff;transition:border-color .2s}
+  .eq-card{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid var(--line);border-left:5px solid var(--pend);border-radius:10px;padding:11px 13px;margin-bottom:8px;background:#fff;transition:border-color .2s}
+  .eq-extra{flex-basis:100%;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px;border-top:1px dashed var(--line);padding-top:9px}
+  .terreno-btn{border:1px dashed var(--muted);background:#fff;color:var(--muted);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+  .terreno-btn.on{background:#DCFCE7;border:1px solid var(--green);border-style:solid;color:#166534}
+  .eq-coment{flex:1;min-width:180px;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:13px;font-family:inherit}
   .eq-card.done{border-left-color:var(--green);background:linear-gradient(90deg,var(--green-soft),#fff 60%)}
   .eq-card.partial{border-left-color:var(--or)}
   .eq-info{min-width:150px;flex-shrink:0}
@@ -191,6 +195,26 @@
   .radioset input[value="PC"]:checked+span{background:var(--pc);color:#fff}
   .radioset input[value="NC"]:checked+span{background:var(--nc);color:#fff}
 
+  /* QC más claro para técnicos */
+  .qc-status{font-size:12px;font-weight:800;padding:4px 11px;border-radius:999px;white-space:nowrap}
+  .qc-status.s-pend{background:#F1F2F4;color:#64748B}
+  .qc-status.s-c{background:#DCFCE7;color:#166534}
+  .qc-status.s-pc{background:#FEF3C7;color:#92400E}
+  .qc-status.s-nc{background:#FEE2E2;color:#991B1B}
+  .qc-status.s-prog{background:var(--or-soft,#FDEDE3);color:var(--or,#F26522)}
+  .qc-legend{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 2px;font-size:12.5px;color:#475569}
+  .qc-legend span{display:inline-flex;align-items:center;gap:6px}
+  .qc-legend i{width:11px;height:11px;border-radius:50%;display:inline-block}
+  .qc-check{border-top:1px dashed var(--line);padding:14px 0}.qc-check:first-of-type{border-top:none}
+  .qc-txt{margin:0 0 9px;font-size:14px;line-height:1.45;color:#374151}
+  .qc-txt b{color:var(--or);margin-right:2px}
+  .qc-opts{display:flex;gap:8px;flex-wrap:wrap}
+  .qcb{border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:9px 14px;font-size:13.5px;font-weight:700;color:#64748B;cursor:pointer;transition:all .12s}
+  .qcb:hover{border-color:#CBD5E1}
+  .qcb.c.on{background:var(--c);border-color:var(--c);color:#fff}
+  .qcb.pc.on{background:var(--pc);border-color:var(--pc);color:#fff}
+  .qcb.nc.on{background:var(--nc);border-color:var(--nc);color:#fff}
+
   .note{background:#FFF8E6;border:1px solid #FCE9B8;border-radius:8px;padding:10px 12px;font-size:13px;color:#7A5B00}
   .empty{color:var(--muted);font-size:14px;text-align:center;padding:24px}
   .row-flex{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}.grow{flex:1;min-width:140px}
@@ -229,6 +253,7 @@
     <input type="file" id="fileProyecto" accept=".json,application/json" hidden>
     <input type="file" id="fileSesion" accept=".json,application/json" hidden>
     <button class="btn" onclick="document.getElementById('fileSesion').click()">📂 Cargar avance</button>
+    <button class="btn" onclick="nuevoProyecto()">➕ Nuevo</button>
     <button class="btn" onclick="guardarSesion()">💾 Guardar</button>
     <button class="btn primary" onclick="generarInforme()">📄 Informe PDF</button>
   </div>
@@ -258,6 +283,7 @@
     </div>
     <div class="grid c2">
       <div><label>Nombre del proyecto</label><input id="p_nombre" oninput="dirty()"></div>
+      <div><label>ID de proyecto <span class="auto-fill">clave única en el Panel</span></label><input id="p_pid" placeholder="Ej: EBOSA-MATTA-2026" oninput="dirty()"><div class="small" style="margin-top:3px">Mantén el mismo ID entre días para actualizar el mismo proyecto (no crear uno nuevo).</div></div>
       <div><label>Dirección <span class="auto-fill">del JSON</span></label><input id="p_direccion" oninput="dirty()"></div>
       <div><label>Ejecutivo comercial <span class="auto-fill">del JSON</span></label><input id="p_ejecutivo" oninput="dirty()"></div>
       <div><label>Estado general</label><select id="p_estadosel" onchange="dirty();renderEstado()"><option>Sin iniciar</option><option>En ejecución</option><option>En revisión QC</option><option>Finalizado</option></select></div>
@@ -371,7 +397,12 @@
 <section class="panel" id="panel-calidad">
   <div class="card">
     <div class="card-title-bar"><h2>✅ Control de calidad</h2><span class="pill or" id="pillQC">0%</span></div>
-    <p class="hint">Evalúa cada punto: <b style="color:var(--c)">C</b> Conforme · <b style="color:var(--pc)">PC</b> Parcialmente Conforme · <b style="color:var(--nc)">NC</b> No Conforme. Puntaje por descripción: C=3, PC=1, NC=0 (máx 9 por ítem).</p>
+    <p class="hint">Revisa cada punto y marca cómo quedó. Toca el botón que corresponde; si te equivocas, tócalo de nuevo para borrarlo. Anota cualquier detalle en Observaciones.</p>
+    <div class="qc-legend">
+      <span><i style="background:var(--c)"></i> <b>Conforme</b>: cumple, sin problemas</span>
+      <span><i style="background:var(--pc)"></i> <b>Observación</b>: funciona pero hay que mejorar / revisar</span>
+      <span><i style="background:var(--nc)"></i> <b>No conforme</b>: no cumple, requiere corrección</span>
+    </div>
     <div class="progress" style="margin-bottom:6px"><span id="barQC" style="width:0%"></span></div>
     <div class="grid c4" style="margin-top:14px">
       <div class="kpi"><span class="v" id="qcPuntaje">0</span><span class="l">Puntaje total</span></div>
@@ -426,6 +457,33 @@
       <tfoot><tr class="total-row"><td colspan="4">Total materiales</td><td class="right" id="insTotal">$ 0</td><td></td></tr></tfoot>
     </table></div>
   </div>
+  <div class="card">
+    <div class="card-title-bar"><h2>💰 Costos y rentabilidad</h2></div>
+    <p class="hint">Los materiales vienen del listado de arriba. Ingresa la tarifa por día-hombre y (opcional) el monto de venta para calcular el margen.</p>
+    <div class="grid c3">
+      <div><label>Tarifa por día-hombre ($)</label><input type="number" min="0" step="1000" id="cTarifa" placeholder="Ej: 45000" oninput="onCostoInput()"></div>
+      <div><label>Otros costos ($)</label><input type="number" min="0" step="1000" id="cOtros" placeholder="Fletes, arriendos, etc." oninput="onCostoInput()"></div>
+      <div><label>Monto de venta / contrato ($) — opcional</label><input type="number" min="0" step="1000" id="cVenta" placeholder="Para calcular margen" oninput="onCostoInput()"></div>
+    </div>
+    <div class="grid c3" style="margin-top:12px">
+      <div class="kpi"><span class="v" id="cCostoMat" style="font-size:20px">$ 0</span><span class="l">Costo materiales</span></div>
+      <div class="kpi"><span class="v" id="cCostoMO" style="font-size:20px">$ 0</span><span class="l">Costo mano de obra</span></div>
+      <div class="kpi"><span class="v" id="cCostoTot" style="font-size:20px">$ 0</span><span class="l">Costo total</span></div>
+    </div>
+    <div class="grid c2" style="margin-top:10px">
+      <div class="kpi"><span class="v" id="cMargen" style="font-size:20px">—</span><span class="l">Margen ($)</span></div>
+      <div class="kpi"><span class="v" id="cMargenPct" style="font-size:20px">—</span><span class="l">Margen (%)</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title-bar"><h2>🏁 Cierre del proyecto</h2><span class="pill or" id="pillCierre">—</span></div>
+    <div class="row-flex">
+      <div style="width:220px"><label>Fecha de cierre (término real)</label><input type="date" id="cFechaCierre" oninput="onCostoInput()"></div>
+      <button class="btn primary" style="background:var(--green);color:#fff;border-color:var(--green)" onclick="finalizarProyecto()">🏁 Marcar como FINALIZADO</button>
+      <button class="btn" onclick="reabrirProyecto()">Reabrir</button>
+    </div>
+    <p class="small" style="margin-top:8px">Al finalizar, el proyecto pasa a la vista “Finalizados” del Panel de Control con sus métricas de costo y desviación de plazo.</p>
+  </div>
   <div class="card"><h2>📝 Observaciones de cierre</h2><textarea id="cierreObs" placeholder="Pendientes, hallazgos, garantías, próximos pasos…" oninput="dirty()"></textarea></div>
 </section>
 
@@ -454,16 +512,16 @@ document.getElementById('logoWrap').innerHTML=LOGO;
 })();
 
 const QC_DEFS=[
-  {code:"QC-001",name:"Plan de diseño completo",d:["Se verificó que el diseño implementado cumple con las especificaciones acordadas con el cliente y se siguió el plan propuesto.","Se evaluó la coherencia entre el diseño y los requisitos del cliente, identificando posibles desviaciones.","Se revisó la documentación (archivo de redes) del diseño para asegurarse de que esté completa y actualizada."]},
-  {code:"QC-002",name:"Obra Civil y terminaciones",d:["Se inspeccionó la calidad de la obra civil, verificando la correcta ejecución de los acabados y terminaciones.","Se revisaron los registros de la obra civil para asegurarse de que se hayan cumplido los plazos y los estándares de calidad.","Se evaluó el estado de los elementos estructurales y se verificó que no haya daños o deficiencias en la obra."]},
-  {code:"QC-003",name:"Cumplimiento de alimentación eléctrica",d:["Se verificó que todos los equipos estén correctamente conectados a la alimentación eléctrica y no haya problemas de sobrecarga.","Se evaluó la calidad del suministro eléctrico, comprobando que cumpla con los estándares y normativas establecidos.","Se realizaron pruebas para asegurarse de que los sistemas de respaldo de energía estén funcionando correctamente."]},
-  {code:"QC-004",name:"Certificación de Cableado estructurado / conexión",d:["Se realizaron pruebas de conectividad para asegurarse de que el cableado estructurado esté correctamente instalado y cumpla con los estándares.","Se verificó que los cables estén debidamente etiquetados y documentados para facilitar su identificación y mantenimiento.","Se comprobó que las conexiones estén realizadas según las normativas y que no haya interferencias o pérdidas de señal."]},
-  {code:"QC-005",name:"Rotulado de cables/equipos",d:["Se revisó que todos los cables estén debidamente rotulados y que la información sea clara y legible.","Se verificó que los equipos y dispositivos estén correctamente identificados con etiquetas o placas informativas.","Se evaluó la consistencia del sistema de rotulación en toda la instalación, asegurando la uniformidad y facilitando la identificación."]},
-  {code:"QC-006",name:"Configuración y programación de equipos",d:["Se verificó que todos los equipos estén configurados correctamente según las especificaciones y requisitos del cliente.","Se comprobó que los equipos estén programados adecuadamente y que las funcionalidades requeridas estén activas.","Se revisó la compatibilidad entre los diferentes equipos y se realizaron pruebas de interoperabilidad."]},
-  {code:"QC-007",name:"Ubicación correcta de equipamientos y nomenclatura",d:["Se evaluó la ubicación de los equipamientos para asegurarse de que estén colocados correctamente según el diseño y los estándares.","Se verificó que la nomenclatura utilizada para identificar los equipamientos sea consistente y comprensible.","Se revisó la documentación y planos para asegurarse de que la ubicación de los equipamientos esté actualizada y registrada correctamente."]},
-  {code:"QC-008",name:"Operación correcta de equipamiento",d:["Se realizaron pruebas funcionales para garantizar que todos los equipos operen correctamente según sus especificaciones técnicas.","Se evaluó el desempeño de los equipos en condiciones normales de operación, identificando posibles fallos o deficiencias.","Se verificó que no haya errores de funcionamiento, mal funcionamiento o componentes defectuosos en los equipos."]},
-  {code:"QC-009",name:"Operación correcta de conectividad (internet, WiFi)",d:["Se comprobó que la conectividad a Internet esté funcionando correctamente en todos los dispositivos conectados, asegurando una velocidad y estabilidad adecuadas.","Se evaluó la calidad y alcance de la señal WiFi, asegurando una cobertura adecuada en todas las áreas requeridas.","Se realizaron pruebas de velocidad y latencia para asegurarse de que cumpla con los requisitos establecidos."]},
-  {code:"QC-010",name:"Limpieza y orden",d:["Se realizó una inspección visual para asegurarse de que el área esté limpia y ordenada, sin residuos ni obstrucciones.","Se verificó que no haya cables sueltos o desordenados, y que los equipos estén colocados correctamente en sus ubicaciones designadas.","Se evaluó el cumplimiento de los estándares de limpieza y orden establecidos, asegurando un entorno adecuado y seguro."]},
+  {code:"QC-001",name:"Plan de diseño completo",d:["El diseño instalado cumple lo acordado con el cliente y la documentación (archivo de redes) está completa y actualizada."]},
+  {code:"QC-002",name:"Obra civil y terminaciones",d:["La obra civil, acabados y terminaciones están bien ejecutados, sin daños ni deficiencias."]},
+  {code:"QC-003",name:"Alimentación eléctrica",d:["Todos los equipos están correctamente energizados, sin sobrecarga, y los respaldos de energía funcionan."]},
+  {code:"QC-004",name:"Cableado estructurado / conexión",d:["El cableado está bien instalado, certificado y probado, sin pérdidas ni interferencias de señal."]},
+  {code:"QC-005",name:"Rotulado de cables y equipos",d:["Cables y equipos están rotulados de forma clara, legible y uniforme en toda la instalación."]},
+  {code:"QC-006",name:"Configuración y programación de equipos",d:["Los equipos están configurados y programados según los requisitos del cliente y operan correctamente entre sí."]},
+  {code:"QC-007",name:"Ubicación y nomenclatura de equipos",d:["Los equipos están ubicados según el diseño, con nomenclatura consistente y registrada en los planos."]},
+  {code:"QC-008",name:"Operación correcta del equipamiento",d:["Se probó cada equipo y todos operan correctamente, sin fallas ni componentes defectuosos."]},
+  {code:"QC-009",name:"Conectividad (internet, WiFi)",d:["Internet y WiFi funcionan con buena cobertura, velocidad y estabilidad en todas las áreas requeridas."]},
+  {code:"QC-010",name:"Limpieza y orden",d:["El área quedó limpia y ordenada, sin cables sueltos ni residuos."]},
 ];
 const INSTALL_STAGES=["Cable UTP","Montado","Conectado","Configurado","Probado"];
 
@@ -548,7 +606,7 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
 }));
 
 /* PROYECTO */
-const PF={p_nombre:'nombre',p_direccion:'direccion',p_ejecutivo:'ejecutivo',p_inicio:'inicio',p_termino:'termino'};
+const PF={p_nombre:'nombre',p_pid:'pid',p_direccion:'direccion',p_ejecutivo:'ejecutivo',p_inicio:'inicio',p_termino:'termino'};
 function pullProyecto(){for(const[el,k]of Object.entries(PF))state.proyecto[k]=document.getElementById(el).value;state.proyecto.estado=document.getElementById('p_estadosel').value;state.proyecto.jefe=document.getElementById('p_jefe').value;}
 function pushProyecto(){for(const[el,k]of Object.entries(PF))document.getElementById(el).value=state.proyecto[k]||'';document.getElementById('p_estadosel').value=state.proyecto.estado||'Sin iniciar';document.getElementById('p_jefe').value=state.proyecto.jefe||'';renderEstado();renderTecAsg();}
 const TECNICOS=['Pedro Rivera','Matías Silva','Sebastián Espinoza','Ciro Forte','Ariel Lazo','Jhon Villegas'];
@@ -658,6 +716,7 @@ function parseDetalle(data,fname){
   // Nombre
   const nombre=F.p_rec||F.p_nombre||guess(['p_rec','recinto','nombreproyecto','proyecto','project','obra'])||fname.replace(/\.json$/i,'');
   if(nombre)document.getElementById('p_nombre').value=nombre;
+  if(nombre&&!document.getElementById('p_pid').value){document.getElementById('p_pid').value=slugPid(nombre).toUpperCase().replace(/-/g,'-').slice(0,40);}
   // Dirección compuesta: dir + comuna + región
   const dirP=(F.p_dir||guess(['p_dir','direccion','address'])||'').trim();
   const comuna=(F.p_com||guess(['p_com','comuna'])||'').trim();
@@ -752,7 +811,11 @@ function renderEquipos(){
           <div class="eq-mini"><span style="width:${pct}%"></span></div>
         </div>
         <div class="eq-stages">${chips}</div>
-        <button class="iconbtn" onclick="delUnit('${e.id}')" title="Eliminar">🗑</button>`;
+        <button class="iconbtn" onclick="delUnit('${e.id}')" title="Eliminar">🗑</button>
+        <div class="eq-extra">
+          <button class="terreno-btn ${e.enTerreno?'on':''}" onclick="toggleTerreno('${e.id}')" title="Marca cuando el equipo salió de bodega y está en terreno">${e.enTerreno?('📍 En terreno · '+(e.fechaTerreno?fmtFecha(e.fechaTerreno):'')):'📦 Marcar en terreno'}</button>
+          <input class="eq-coment" placeholder="Comentario / detalle del equipo…" value="${esc(e.comentario||'')}" onchange="setComentario('${e.id}',this.value)">
+        </div>`;
       c.appendChild(card);
       if(qaUnitOpen.has(e.id)){const pan=document.createElement('div');pan.innerHTML=qaPanelHtml(e);c.appendChild(pan.firstChild);}
     });
@@ -779,6 +842,8 @@ function qaAll(id,val){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.q
 function setUnit(id,f,v){const e=state.equipos.find(x=>x.id===id);if(!e)return;e[f]=v;renderFotos();dirty();}
 function toggleStage(id,i){const e=state.equipos.find(x=>x.id===id);e.etapas[i]=!e.etapas[i];renderEquipos();recalc();dirty();}
 function markPrev(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;const all=e.etapas.slice(0,4).every(Boolean);for(let i=0;i<4;i++)e.etapas[i]=!all;renderEquipos();recalc();dirty();}
+function toggleTerreno(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.enTerreno=!e.enTerreno;if(e.enTerreno&&!e.fechaTerreno)e.fechaTerreno=hoyISO();renderEquipos();dirty();}
+function setComentario(id,val){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.comentario=val;dirty();}
 
 /* CALIDAD */
 let qcOpen=new Set();
@@ -786,27 +851,33 @@ const JEFE_NAMES=['Francisco Morales','Nicolás Jara','Fabián Pavez'];
 function applyJefeToQC(){const j=state.proyecto.jefe||'';QC_DEFS.forEach(d=>{const q=state.qc[d.code];if(!q)return;if(!q.resp||JEFE_NAMES.includes(q.resp))q.resp=j;});}
 function onJefeChange(){state.proyecto.jefe=document.getElementById('p_jefe').value;applyJefeToQC();syncCuadrilla();renderTec();renderQC();recalc();dirty();}
 function toggleQC(code,el){el.classList.toggle('open');if(el.classList.contains('open'))qcOpen.add(code);else qcOpen.delete(code);}
+function qcStatus(q){
+  const v=q.evals[0];
+  if(!v)return{cls:'pend',label:'Pendiente'};
+  if(v==='NC')return{cls:'nc',label:'No conforme'};
+  if(v==='PC')return{cls:'pc',label:'Con observaciones'};
+  return{cls:'c',label:'Conforme'};
+}
 function renderQC(){
   const c=document.getElementById('qcList');c.innerHTML='';
   const jefe=state.proyecto.jefe||'';
+  const OPTS=[['C','✓ Conforme'],['PC','! Observación'],['NC','✕ No conforme']];
   QC_DEFS.forEach(def=>{
-    if(!state.qc[def.code])state.qc[def.code]={resp:'',evals:[null,null,null],obs:''};
+    if(!state.qc[def.code])state.qc[def.code]={resp:'',evals:[null],obs:''};
     const q=state.qc[def.code];if(!q.resp&&jefe)q.resp=jefe;
-    const{pts,max}=qcScore(q);const conf=max?Math.round(pts/max*100):0;
-    const col=conf>=80?'var(--c)':conf>=50?'var(--pc)':(max?'var(--nc)':'var(--pend)');
+    const st=qcStatus(q);
     const open=qcOpen.has(def.code);
     const item=document.createElement('div');item.className='qc-item'+(open?' open':'');item.dataset.code=def.code;
-    item.innerHTML=`<div class="qc-head" onclick="toggleQC('${def.code}',this.parentElement)"><span class="qc-code">${def.code}</span><span class="qc-name">${def.name}</span><span class="qc-score" style="background:${col}22;color:${col}">${max?conf+'% · '+pts+'/'+max:'pendiente'}</span><span style="color:var(--muted)">▾</span></div>
-      <div class="qc-body"><div style="margin-bottom:6px;max-width:340px"><label>Responsable</label><input value="${esc(q.resp)}" onchange="setQC('${def.code}','resp',this.value)"></div>
-      ${def.d.map((txt,i)=>`<div class="qc-desc"><p><span class="badge b${i+1}">Descripción ${i+1}</span>${txt}</p>
-        <div class="radioset">${['C','PC','NC'].map(v=>`<label><input type="radio" name="${def.code}_${i}" value="${v}" ${q.evals[i]===v?'checked':''} onchange="setEval('${def.code}',${i},'${v}')"><span>${v}</span></label>`).join('')}</div>
-        ${q.evals[i]?`<button class="iconbtn" style="margin-left:8px;width:auto;padding:0 10px;font-size:12px" onclick="setEval('${def.code}',${i},null)">limpiar</button>`:''}</div>`).join('')}
-      <div style="margin-top:8px"><label>Observaciones / hallazgos</label><textarea onchange="setQC('${def.code}','obs',this.value)">${esc(q.obs)}</textarea></div></div>`;
+    item.innerHTML=`<div class="qc-head" onclick="toggleQC('${def.code}',this.parentElement)"><span class="qc-code">${def.code}</span><span class="qc-name">${def.name}</span><span class="qc-status s-${st.cls}">${st.label}</span><span style="color:var(--muted)">▾</span></div>
+      <div class="qc-body"><div style="margin-bottom:10px;max-width:340px"><label>Responsable de la revisión</label><input value="${esc(q.resp)}" onchange="setQC('${def.code}','resp',this.value)"></div>
+      <div class="qc-check"><p class="qc-txt">${def.d[0]}</p>
+        <div class="qc-opts">${OPTS.map(([v,lbl])=>`<button type="button" class="qcb ${v.toLowerCase()} ${q.evals[0]===v?'on':''}" onclick="setEval('${def.code}','${v}')">${lbl}</button>`).join('')}</div></div>
+      <div style="margin-top:10px"><label>Observaciones / hallazgos (opcional)</label><textarea placeholder="Anota detalles, correcciones pendientes o comentarios…" onchange="setQC('${def.code}','obs',this.value)">${esc(q.obs)}</textarea></div></div>`;
     c.appendChild(item);
   });
 }
-function qcScore(q){let pts=0,max=0;q.evals.forEach(v=>{if(v){max+=3;pts+=v==='C'?3:v==='PC'?1:0;}});return{pts,max};}
-function setEval(code,i,v){qcOpen.add(code);state.qc[code].evals[i]=v;renderQC();recalc();dirty();}
+function qcScore(q){const v=q.evals[0];if(!v)return{pts:0,max:0};return{pts:v==='C'?3:v==='PC'?1:0,max:3};}
+function setEval(code,v){qcOpen.add(code);const q=state.qc[code];q.evals[0]=(q.evals[0]===v?null:v);renderQC();recalc();dirty();}
 function setQC(code,f,v){state.qc[code][f]=v;recalc();dirty();}
 
 /* FOTOS */
@@ -886,7 +957,7 @@ function recalc(){
   const conf=maxAll?Math.round(pts/maxAll*100):0;setText('qcPuntaje',pts+' / '+maxAll);setText('qcConf',conf+'%');setText('qcNC',nc);setText('qcEval',ev+'/'+QC_DEFS.length);setText('pillQC',conf+'%');document.getElementById('barQC').style.width=conf+'%';
   const ini=document.getElementById('p_inicio').value,fin=document.getElementById('p_termino').value;let dias=0;if(ini&&fin){dias=Math.round((new Date(fin)-new Date(ini))/86400000)+1;if(dias<0)dias=0;}
   const dh=state.tecnicos.reduce((a,t)=>a+(t.dias||0),0);setText('cDias',dias);setText('cTecnicos',state.tecnicos.length);setText('cDiasHombre',dh);
-  setText('insTotal',money(state.insumos.reduce((a,i)=>a+(i.cant||0)*(i.precio||0),0)));
+  setText('insTotal',money(state.insumos.reduce((a,i)=>a+(i.cant||0)*(i.precio||0),0)));renderCostos();
   renderDashboard();
 }
 function setText(id,v){const el=document.getElementById(id);if(el)el.textContent=v;}
@@ -962,9 +1033,16 @@ function renderDashboard(){
 }
 
 /* GUARDAR / CARGAR */
-let _dirty=false;function dirty(){_dirty=true;}
+let _dirty=false;function dirty(){_dirty=true;autosave();}
 function guardarSesion(){pullProyecto();state.cierreObs=document.getElementById('cierreObs').value;const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');const nm=(state.proyecto.nombre||'avance').replace(/[^\w\-]+/g,'_');a.href=URL.createObjectURL(blob);a.download='Seguimiento_'+nm+'_'+new Date().toISOString().slice(0,10)+'.json';a.click();_dirty=false;}
-document.getElementById('fileSesion').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);state=Object.assign({proyecto:{},equipos:[],qc:{},fotos:[],tecnicos:[],insumos:[],cierreObs:'',bitacora:[]},d);if(!state.bitacora)state.bitacora=[];state.equipos.forEach(eq=>{if(!eq.id)eq.id=uid();if(!eq.sector)eq.sector='General';if(!Array.isArray(eq.etapas))eq.etapas=INSTALL_STAGES.map(()=>false);if(eq.etapas.length===4){eq.etapas=[!!eq.cableado,...eq.etapas];}if(eq.etapas.length!==INSTALL_STAGES.length){const n=INSTALL_STAGES.map((_,i)=>!!eq.etapas[i]);eq.etapas=n;}delete eq.cableado;if(!eq.qa)eq.qa={};recomputeProbado(eq);});renderAll();alert('Avance cargado.');}catch(err){alert('Archivo inválido: '+err.message);}};r.readAsText(f);e.target.value='';});
+function applyLoaded(d){
+  state=Object.assign({proyecto:{},equipos:[],qc:{},fotos:[],tecnicos:[],insumos:[],cierreObs:'',bitacora:[]},d);
+  if(!state.bitacora)state.bitacora=[];
+  state.equipos.forEach(eq=>{if(!eq.id)eq.id=uid();if(!eq.sector)eq.sector='General';if(!Array.isArray(eq.etapas))eq.etapas=INSTALL_STAGES.map(()=>false);if(eq.etapas.length===4){eq.etapas=[!!eq.cableado,...eq.etapas];}if(eq.etapas.length!==INSTALL_STAGES.length){const n=INSTALL_STAGES.map((_,i)=>!!eq.etapas[i]);eq.etapas=n;}delete eq.cableado;if(!eq.qa)eq.qa={};recomputeProbado(eq);});
+  Object.values(state.qc||{}).forEach(q=>{if(Array.isArray(q.evals)&&q.evals.length>1){const v=q.evals.includes('NC')?'NC':q.evals.includes('PC')?'PC':q.evals.includes('C')?'C':null;q.evals=[v];}else if(!Array.isArray(q.evals)){q.evals=[null];}});
+  renderAll();
+}
+document.getElementById('fileSesion').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{applyLoaded(JSON.parse(r.result));_dirty=false;autosave();alert('Avance cargado.');}catch(err){alert('Archivo inválido: '+err.message);}};r.readAsText(f);e.target.value='';});
 
 /* INFORME PDF */
 function generarInforme(){
@@ -980,7 +1058,8 @@ function generarInforme(){
   const stB=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">C</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">PC</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">NC</span>':'<span style="color:#aaa">—</span>';
   const nCols=INSTALL_STAGES.length+2;
   let eqRows='';bySector().forEach((items,sector)=>{eqRows+=`<tr class="sec-row"><td colspan="${nCols}">${esc(sector)}</td></tr>`;items.forEach(e=>{eqRows+=`<tr><td>${esc(e.nombre)}</td>${e.etapas.map(s=>`<td class="center">${s?'✓':'—'}</td>`).join('')}<td class="center">${Math.round(e.etapas.filter(Boolean).length/INSTALL_STAGES.length*100)}%</td></tr>`;});});
-  let qcRows=QC_DEFS.map(d=>{const q=state.qc[d.code]||{evals:[null,null,null]};const s=qcScore(q);const cf=s.max?Math.round(s.pts/s.max*100):0;return `<tr><td>${d.code}</td><td>${d.name}</td><td class="center">${stB(q.evals[0])} ${stB(q.evals[1])} ${stB(q.evals[2])}</td><td class="center"><b>${s.max?cf+'%':'—'}</b></td></tr>`;}).join('');
+  const stWord=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">Conforme</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">Observación</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">No conforme</span>':'<span style="color:#aaa">Pendiente</span>';
+  let qcRows=QC_DEFS.map(d=>{const q=state.qc[d.code]||{evals:[null]};return `<tr><td>${d.code}</td><td>${d.name}</td><td>${esc((state.qc[d.code]||{}).resp||'—')}</td><td class="center">${stWord(q.evals[0])}</td></tr>`;}).join('');
   const ncList=QC_DEFS.map(d=>({d,o:(state.qc[d.code]||{}).obs})).filter(x=>x.o);
   let obsHtml=ncList.length?('<ul style="margin:0;padding-left:18px;font-size:12px">'+ncList.map(x=>`<li><b>${x.d.code}:</b> ${esc(x.o)}</li>`).join('')+'</ul>'):'<p class="small">Sin observaciones registradas.</p>';
   const fotosOrd=[...state.equipos.map(e=>{const f=state.fotos.find(x=>x.equipoId===e.id);return f?{f,cap:e.sector+' · '+e.nombre}:null;}).filter(Boolean),...state.fotos.filter(f=>f.cat==='electrico').map(f=>({f,cap:'Circuito eléctrico'})),...state.fotos.filter(f=>f.cat==='internet').map(f=>({f,cap:'Internet / conectividad'})),...state.fotos.filter(f=>f.cat==='otros').map(f=>({f,cap:'Otros'}))];
@@ -1000,7 +1079,7 @@ function generarInforme(){
       <div class="r-kpi"><div class="v">${dias}</div><div class="l">Días</div></div>
       <div class="r-kpi"><div class="v">${state.tecnicos.length}</div><div class="l">Técnicos</div></div></div></div>
     <div class="r-sec"><h2>Estado de equipos instalados</h2><table><thead><tr><th>Equipo</th>${INSTALL_STAGES.map(s=>`<th class="center">${s}</th>`).join('')}<th class="center">Avance</th></tr></thead><tbody>${eqRows||`<tr><td colspan="${nCols}" class="center">Sin equipos</td></tr>`}</tbody></table></div>
-    <div class="r-sec"><h2>Control de calidad</h2><table><thead><tr><th>Ítem</th><th>Punto a revisar</th><th class="center">Evaluación (D1·D2·D3)</th><th class="center">Conformidad</th></tr></thead><tbody>${qcRows}</tbody></table><p style="font-size:11px;margin-top:6px;color:#777">No conformidades: <b style="color:#DC2626">${nc}</b> · Conformidad global: <b>${conf}%</b></p></div>
+    <div class="r-sec"><h2>Control de calidad</h2><table><thead><tr><th>Ítem</th><th>Punto a revisar</th><th>Responsable</th><th class="center">Estado</th></tr></thead><tbody>${qcRows}</tbody></table><p style="font-size:11px;margin-top:6px;color:#777">No conformidades: <b style="color:#DC2626">${nc}</b> · Conformidad global: <b>${conf}%</b></p></div>
     <div class="r-sec"><h2>Observaciones y hallazgos</h2>${obsHtml}${state.cierreObs?`<p style="font-size:12px;margin-top:8px"><b>Cierre:</b> ${esc(state.cierreObs)}</p>`:''}</div>
     <div class="r-sec"><h2>Respaldo fotográfico</h2>${fotosHtml}</div>
     <div style="margin-top:30px;display:flex;gap:40px;font-size:12px"><div style="flex:1;border-top:1px solid #999;padding-top:6px;text-align:center">Ejecutó (Safecard)</div><div style="flex:1;border-top:1px solid #999;padding-top:6px;text-align:center">Recibe conforme (Cliente)</div></div>
@@ -1098,25 +1177,82 @@ function bitChartSVG(sc){
   const leg=`<g font-size="9"><rect x="${W-R-150}" y="${T-2}" width="12" height="3" fill="#F26522"/><text x="${W-R-134}" y="${T+2}" fill="#64748B">Avance real</text><line x1="${W-R-66}" y1="${T}" x2="${W-R-54}" y2="${T}" stroke="#94A3B8" stroke-width="2" stroke-dasharray="4 3"/><text x="${W-R-50}" y="${T+2}" fill="#64748B">Plan</text></g>`;
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${g}<polygon points="${areaPts}" fill="rgba(242,101,34,.09)"/>${plan}${hoyLine}<polyline points="${poly}" fill="none" stroke="#F26522" stroke-width="2.5" stroke-linejoin="round"/>${dots}${xl}${leg}</svg>`;
 }
-function renderAll(){pushProyecto();renderEquipos();renderQC();renderFotos();renderTec();renderIns();document.getElementById('cierreObs').value=state.cierreObs||'';recalc();}
+function renderAll(){pushProyecto();renderEquipos();renderQC();renderFotos();renderTec();renderIns();document.getElementById('cierreObs').value=state.cierreObs||'';
+  const g=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
+  g('cTarifa',state.proyecto.tarifaMO||'');g('cOtros',state.proyecto.otrosCostos||'');g('cVenta',state.proyecto.venta||'');g('cFechaCierre',state.proyecto.fechaCierre||'');
+  recalc();renderCostos();}
 window.addEventListener('beforeunload',e=>{if(_dirty){e.preventDefault();e.returnValue='';}});
-/* ===== SINCRONIZACIÓN AL PANEL (Firebase) ===== */
-function projId(){if(!state.proyecto.id){state.proyecto.id='p_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);dirty();}return state.proyecto.id;}
-function buildSnapshot(){
-  const st=getStats(),sc=scheduleCalc(),p=state.proyecto;
-  const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
+/* ===== COSTOS Y CIERRE ===== */
+function getCostos(){
+  const mat=state.insumos.reduce((a,i)=>a+(i.cant||0)*(i.precio||0),0);
   const dh=state.tecnicos.reduce((a,t)=>a+(t.dias||0),0);
+  const tarifa=+state.proyecto.tarifaMO||0, otros=+state.proyecto.otrosCostos||0, venta=+state.proyecto.venta||0;
+  const mo=dh*tarifa, total=mat+mo+otros;
+  const margen=venta?venta-total:null, margenPct=venta?Math.round((venta-total)/venta*100):null;
+  return{mat,mo,otros,total,venta,margen,margenPct,dh,tarifa};
+}
+function renderCostos(){
+  if(!document.getElementById('cCostoMat'))return;
+  const c=getCostos();
+  setText('cCostoMat',money(c.mat));setText('cCostoMO',money(c.mo));setText('cCostoTot',money(c.total));
+  setText('cMargen',c.margen==null?'—':money(c.margen));
+  setText('cMargenPct',c.margenPct==null?'—':(c.margenPct+'%'));
+  const pill=document.getElementById('pillCierre');if(pill){const e=state.proyecto.estado||'Sin iniciar';pill.textContent=e;pill.style.background=e==='Finalizado'?'color-mix(in srgb,var(--green) 15%,#fff)':'var(--or-soft)';pill.style.color=e==='Finalizado'?'var(--green)':'var(--or-dark)';}
+}
+function onCostoInput(){
+  state.proyecto.tarifaMO=+document.getElementById('cTarifa').value||0;
+  state.proyecto.otrosCostos=+document.getElementById('cOtros').value||0;
+  state.proyecto.venta=+document.getElementById('cVenta').value||0;
+  state.proyecto.fechaCierre=document.getElementById('cFechaCierre').value||'';
+  renderCostos();dirty();
+}
+function finalizarProyecto(){
+  document.getElementById('p_estadosel').value='Finalizado';
+  if(!document.getElementById('cFechaCierre').value)document.getElementById('cFechaCierre').value=hoyISO();
+  pullProyecto();state.proyecto.fechaCierre=document.getElementById('cFechaCierre').value;
+  renderEstado();recalc();dirty();syncNow(true);
+  alert('Proyecto marcado como FINALIZADO y enviado al Panel de Control.');
+}
+function reabrirProyecto(){
+  document.getElementById('p_estadosel').value='En ejecución';
+  pullProyecto();renderEstado();recalc();dirty();syncNow(true);
+}
+/* ===== SINCRONIZACIÓN AL PANEL (Firebase) ===== */
+function slugPid(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
+function projId(){
+  const pid=slugPid(state.proyecto.pid);
+  if(pid)return 'p_'+pid;
+  if(!state.proyecto.id){state.proyecto.id='p_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);dirty();}
+  return state.proyecto.id;
+}
+function buildSnapshot(){
+  const st=getStats(),sc=scheduleCalc(),p=state.proyecto,c=getCostos();
+  const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
+  const dh=c.dh;
+  const MS=86400000;
+  const dd=(a,b)=>(a&&b)?Math.round((new Date(b+'T00:00')-new Date(a+'T00:00'))/MS):null;
+  const finalizado=(p.estado==='Finalizado');
+  const fechaCierre=p.fechaCierre||(finalizado?hoyISO():'');
+  const diasPlan=dd(p.inicio,p.termino);
+  const diasReales=finalizado?dd(p.inicio,fechaCierre):null;
+  const desvioDias=(diasPlan!=null&&diasReales!=null)?(diasReales-diasPlan):null;
+  const nEq=state.equipos.length;
   return{
-    id:projId(), nombre:p.nombre||document.getElementById('p_nombre').value||'(sin nombre)',
+    id:projId(), pid:(state.proyecto.pid||'').trim(), nombre:p.nombre||document.getElementById('p_nombre').value||'(sin nombre)',
     direccion:p.direccion||document.getElementById('p_direccion').value||'', comuna:p.comuna||'',
     jefe:p.jefe||'', ejecutivo:p.ejecutivo||'',
     inicio:p.inicio||'', termino:p.termino||'', plazo:p.plazo||'',
     avance:st.avance, cabPct:st.cabPct, qcConf:st.qcConf, qaPct:st.qaPct,
-    equiposTotal:state.equipos.length, equiposListos:listos,
+    equiposTotal:nEq, equiposListos:listos, equiposEnTerreno:state.equipos.filter(e=>e.enTerreno).length,
     nTecnicos:state.tecnicos.length, diasHombre:dh,
-    estado: sc.ok?sc.estado:'Sin fechas',
+    estado: finalizado?'Finalizado':(sc.ok?sc.estado:'Sin fechas'),
+    finalizado, fechaCierre,
     diasRest: sc.ok?sc.diasRest:null, diasTrans: sc.ok?sc.diasTrans:null,
     expected: sc.ok?sc.expected:null, gap: sc.ok?sc.gap:null,
+    diasPlan, diasReales, desvioDias,
+    costoMateriales:c.mat, costoMO:c.mo, otrosCostos:c.otros, costoTotal:c.total,
+    costoPorEquipo: nEq?Math.round(c.total/nEq):0,
+    venta:c.venta, margen:c.margen, margenPct:c.margenPct,
     updatedBy: p.jefe||''
   };
 }
@@ -1131,7 +1267,26 @@ async function syncNow(silent){
   }catch(e){setSyncStatus('✗ Error al sincronizar: '+(e.message||e),'var(--nc)');}
 }
 window.addEventListener('safecard-sync-ready',()=>{if(state.equipos.length)syncNow(true);});
-renderAll();
+/* ===== AUTO-GUARDADO LOCAL (IndexedDB) ===== */
+const IDB_DB='safecard_seg',IDB_STORE='estado',IDB_KEY='current';
+function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open(IDB_DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(IDB_STORE);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+async function idbSave(o){try{const db=await idbOpen();return new Promise(res=>{const tx=db.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).put(o,IDB_KEY);tx.oncomplete=()=>res(true);tx.onerror=()=>res(false);});}catch(e){return false;}}
+async function idbLoad(){try{const db=await idbOpen();return new Promise(res=>{const tx=db.transaction(IDB_STORE,'readonly');const rq=tx.objectStore(IDB_STORE).get(IDB_KEY);rq.onsuccess=()=>res(rq.result||null);rq.onerror=()=>res(null);});}catch(e){return null;}}
+async function idbClear(){try{const db=await idbOpen();return new Promise(res=>{const tx=db.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).delete(IDB_KEY);tx.oncomplete=()=>res(true);tx.onerror=()=>res(false);});}catch(e){return false;}}
+let _saveT=null;
+function autosave(){clearTimeout(_saveT);_saveT=setTimeout(()=>{try{pullProyecto();state.cierreObs=document.getElementById('cierreObs').value;idbSave(JSON.parse(JSON.stringify(state)));}catch(e){}},700);}
+async function nuevoProyecto(){
+  if(!confirm('¿Empezar un proyecto NUEVO? Se limpiará lo que está en pantalla. Si necesitas conservarlo, usa “Guardar” antes.'))return;
+  await idbClear();
+  state={proyecto:{},equipos:[],qc:{},fotos:[],tecnicos:[],insumos:[],cierreObs:'',bitacora:[]};
+  _dirty=false;renderAll();
+  alert('Proyecto nuevo. Carga el Detalle de Proyecto o agrega equipos.');
+}
+(async function init(){
+  let saved=null;try{saved=await idbLoad();}catch(e){}
+  if(saved&&((saved.equipos&&saved.equipos.length)||(saved.proyecto&&saved.proyecto.nombre))){applyLoaded(saved);}
+  else{renderAll();}
+})();
 </script>
 
 <!-- ====== CONFIG FIREBASE (pega aquí la MISMA config del Panel de Control) ====== -->
