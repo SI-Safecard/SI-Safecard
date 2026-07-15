@@ -452,37 +452,18 @@
     </div>
     <p class="hint">Pernos de anclaje (4 × barrera/torniquete/speedgate/cámara LPR) y conectores RJ45 (2 × equipo) se calculan automáticamente. Todo es editable. UTP y fibra parten del plan del proyecto.</p>
     <div class="table-wrap"><table>
-      <thead><tr><th>Insumo</th><th class="center" style="width:80px">Unidad</th><th class="center" style="width:90px">Cantidad</th><th class="center" style="width:110px">$ Unitario</th><th class="right" style="width:120px">Subtotal</th><th></th></tr></thead>
+      <thead><tr><th>Insumo</th><th class="center" style="width:90px">Unidad</th><th class="center" style="width:110px">Cantidad</th><th style="width:44px"></th></tr></thead>
       <tbody id="insBody"></tbody>
-      <tfoot><tr class="total-row"><td colspan="4">Total materiales</td><td class="right" id="insTotal">$ 0</td><td></td></tr></tfoot>
     </table></div>
-  </div>
-  <div class="card">
-    <div class="card-title-bar"><h2>💰 Costos y rentabilidad</h2></div>
-    <p class="hint">Los materiales vienen del listado de arriba. Ingresa la tarifa por día-hombre y (opcional) el monto de venta para calcular el margen.</p>
-    <div class="grid c3">
-      <div><label>Tarifa por día-hombre ($)</label><input type="number" min="0" step="1000" id="cTarifa" placeholder="Ej: 45000" oninput="onCostoInput()"></div>
-      <div><label>Otros costos ($)</label><input type="number" min="0" step="1000" id="cOtros" placeholder="Fletes, arriendos, etc." oninput="onCostoInput()"></div>
-      <div><label>Monto de venta / contrato ($) — opcional</label><input type="number" min="0" step="1000" id="cVenta" placeholder="Para calcular margen" oninput="onCostoInput()"></div>
-    </div>
-    <div class="grid c3" style="margin-top:12px">
-      <div class="kpi"><span class="v" id="cCostoMat" style="font-size:20px">$ 0</span><span class="l">Costo materiales</span></div>
-      <div class="kpi"><span class="v" id="cCostoMO" style="font-size:20px">$ 0</span><span class="l">Costo mano de obra</span></div>
-      <div class="kpi"><span class="v" id="cCostoTot" style="font-size:20px">$ 0</span><span class="l">Costo total</span></div>
-    </div>
-    <div class="grid c2" style="margin-top:10px">
-      <div class="kpi"><span class="v" id="cMargen" style="font-size:20px">—</span><span class="l">Margen ($)</span></div>
-      <div class="kpi"><span class="v" id="cMargenPct" style="font-size:20px">—</span><span class="l">Margen (%)</span></div>
-    </div>
   </div>
   <div class="card">
     <div class="card-title-bar"><h2>🏁 Cierre del proyecto</h2><span class="pill or" id="pillCierre">—</span></div>
     <div class="row-flex">
-      <div style="width:220px"><label>Fecha de cierre (término real)</label><input type="date" id="cFechaCierre" oninput="onCostoInput()"></div>
+      <div style="width:220px"><label>Fecha de cierre (término real)</label><input type="date" id="cFechaCierre" oninput="state.proyecto.fechaCierre=this.value;dirty()"></div>
       <button class="btn primary" style="background:var(--green);color:#fff;border-color:var(--green)" onclick="finalizarProyecto()">🏁 Marcar como FINALIZADO</button>
       <button class="btn" onclick="reabrirProyecto()">Reabrir</button>
     </div>
-    <p class="small" style="margin-top:8px">Al finalizar, el proyecto pasa a la vista “Finalizados” del Panel de Control con sus métricas de costo y desviación de plazo.</p>
+    <p class="small" style="margin-top:8px">Al finalizar, el proyecto pasa a la vista “Finalizados” del Panel de Control, donde se ingresan los montos y se calcula la rentabilidad.</p>
   </div>
   <div class="card"><h2>📝 Observaciones de cierre</h2><textarea id="cierreObs" placeholder="Pendientes, hallazgos, garantías, próximos pasos…" oninput="dirty()"></textarea></div>
 </section>
@@ -919,9 +900,9 @@ function addTecnico(){state.tecnicos.push({id:uid(),nombre:'',dias:1});renderTec
 function delTec(id){state.tecnicos=state.tecnicos.filter(t=>t.id!==id);renderTec();recalc();dirty();}
 function renderTec(){const b=document.getElementById('tecBody');b.innerHTML='';if(!state.tecnicos.length){b.innerHTML='<tr><td colspan="3" class="empty">Sin técnicos. Asigna la cuadrilla en la pestaña Proyecto.</td></tr>';return;}state.tecnicos.forEach(t=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input value="${esc(t.nombre)}" onchange="setTec('${t.id}','nombre',this.value)" placeholder="Nombre">${t.jefe?'<span class="small" style="color:var(--or-dark);font-weight:700;margin-left:6px">JEFE</span>':''}</td><td class="center"><input type="number" min="0" step="0.5" value="${t.dias}" class="center" onchange="setTec('${t.id}','dias',this.value)"></td><td class="center"><button class="iconbtn" onclick="delTec('${t.id}')">🗑</button></td>`;b.appendChild(tr);});}
 function setTec(id,f,v){const t=state.tecnicos.find(x=>x.id===id);t[f]=f==='dias'?toNum(v):v;recalc();dirty();}
-function addInsumo(){state.insumos.push({id:uid(),nombre:'',unidad:'un',cant:0,precio:0});renderIns();recalc();dirty();}
+function addInsumo(){state.insumos.push({id:uid(),nombre:'',unidad:'un',cant:0});renderIns();recalc();dirty();}
 function delIns(id){state.insumos=state.insumos.filter(i=>i.id!==id);renderIns();recalc();dirty();}
-function renderIns(){const b=document.getElementById('insBody');b.innerHTML='';if(!state.insumos.length)b.innerHTML='<tr><td colspan="6" class="empty">Sin materiales. Usa "Generar / recalcular".</td></tr>';state.insumos.forEach(i=>{const sub=(i.cant||0)*(i.precio||0);const tr=document.createElement('tr');tr.innerHTML=`<td><input value="${esc(i.nombre)}" onchange="setIns('${i.id}','nombre',this.value)"></td><td class="center"><input value="${esc(i.unidad)}" class="center" onchange="setIns('${i.id}','unidad',this.value)"></td><td class="center"><input type="number" min="0" step="0.1" value="${i.cant}" class="center" onchange="setIns('${i.id}','cant',this.value)"></td><td class="center"><input type="number" min="0" value="${i.precio}" class="center" onchange="setIns('${i.id}','precio',this.value)"></td><td class="right">${money(sub)}</td><td class="center"><button class="iconbtn" onclick="delIns('${i.id}')">🗑</button></td>`;b.appendChild(tr);});}
+function renderIns(){const b=document.getElementById('insBody');b.innerHTML='';if(!state.insumos.length)b.innerHTML='<tr><td colspan="4" class="empty">Sin materiales. Usa "Generar / recalcular".</td></tr>';state.insumos.forEach(i=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input value="${esc(i.nombre)}" onchange="setIns('${i.id}','nombre',this.value)"></td><td class="center"><input value="${esc(i.unidad)}" class="center" onchange="setIns('${i.id}','unidad',this.value)"></td><td class="center"><input type="number" min="0" step="0.1" value="${i.cant}" class="center" onchange="setIns('${i.id}','cant',this.value)"></td><td class="center"><button class="iconbtn" onclick="delIns('${i.id}')">🗑</button></td>`;b.appendChild(tr);});}
 function setIns(id,f,v){const i=state.insumos.find(x=>x.id===id);i[f]=(f==='nombre'||f==='unidad')?v:toNum(v);renderIns();recalc();dirty();}
 function money(n){return '$ '+Math.round(n||0).toLocaleString('es-CL');}
 function equiposPernos(){return state.equipos.filter(e=>/barrera|torniquete|speedgate|lpr/.test(String(e.nombre||'').toLowerCase())).length;}
@@ -932,7 +913,7 @@ function generarMateriales(){
   const tp=state.techPlan||{};
   const pernos=4*equiposPernos();
   const rj45=2*nEq;
-  const add=(n,u,c)=>state.insumos.push({id:uid(),nombre:n,unidad:u,cant:Math.max(0,Math.ceil(c||0)),precio:0});
+  const add=(n,u,c)=>state.insumos.push({id:uid(),nombre:n,unidad:u,cant:Math.max(0,Math.ceil(c||0))});
   state.insumos=[];
   add('Cable UTP','m',tp.utp||0);
   add('Fibra óptica','m',tp.fibra||0);
@@ -957,7 +938,7 @@ function recalc(){
   const conf=maxAll?Math.round(pts/maxAll*100):0;setText('qcPuntaje',pts+' / '+maxAll);setText('qcConf',conf+'%');setText('qcNC',nc);setText('qcEval',ev+'/'+QC_DEFS.length);setText('pillQC',conf+'%');document.getElementById('barQC').style.width=conf+'%';
   const ini=document.getElementById('p_inicio').value,fin=document.getElementById('p_termino').value;let dias=0;if(ini&&fin){dias=Math.round((new Date(fin)-new Date(ini))/86400000)+1;if(dias<0)dias=0;}
   const dh=state.tecnicos.reduce((a,t)=>a+(t.dias||0),0);setText('cDias',dias);setText('cTecnicos',state.tecnicos.length);setText('cDiasHombre',dh);
-  setText('insTotal',money(state.insumos.reduce((a,i)=>a+(i.cant||0)*(i.precio||0),0)));renderCostos();
+  const pill=document.getElementById('pillCierre');if(pill){const e=state.proyecto.estado||'Sin iniciar';pill.textContent=e;pill.style.background=e==='Finalizado'?'color-mix(in srgb,var(--green) 15%,#fff)':'var(--or-soft)';pill.style.color=e==='Finalizado'?'var(--green)':'var(--or-dark)';}
   renderDashboard();
 }
 function setText(id,v){const el=document.getElementById(id);if(el)el.textContent=v;}
@@ -1179,33 +1160,10 @@ function bitChartSVG(sc){
 }
 function renderAll(){pushProyecto();renderEquipos();renderQC();renderFotos();renderTec();renderIns();document.getElementById('cierreObs').value=state.cierreObs||'';
   const g=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
-  g('cTarifa',state.proyecto.tarifaMO||'');g('cOtros',state.proyecto.otrosCostos||'');g('cVenta',state.proyecto.venta||'');g('cFechaCierre',state.proyecto.fechaCierre||'');
-  recalc();renderCostos();}
+  g('cFechaCierre',state.proyecto.fechaCierre||'');
+  recalc();}
 window.addEventListener('beforeunload',e=>{if(_dirty){e.preventDefault();e.returnValue='';}});
-/* ===== COSTOS Y CIERRE ===== */
-function getCostos(){
-  const mat=state.insumos.reduce((a,i)=>a+(i.cant||0)*(i.precio||0),0);
-  const dh=state.tecnicos.reduce((a,t)=>a+(t.dias||0),0);
-  const tarifa=+state.proyecto.tarifaMO||0, otros=+state.proyecto.otrosCostos||0, venta=+state.proyecto.venta||0;
-  const mo=dh*tarifa, total=mat+mo+otros;
-  const margen=venta?venta-total:null, margenPct=venta?Math.round((venta-total)/venta*100):null;
-  return{mat,mo,otros,total,venta,margen,margenPct,dh,tarifa};
-}
-function renderCostos(){
-  if(!document.getElementById('cCostoMat'))return;
-  const c=getCostos();
-  setText('cCostoMat',money(c.mat));setText('cCostoMO',money(c.mo));setText('cCostoTot',money(c.total));
-  setText('cMargen',c.margen==null?'—':money(c.margen));
-  setText('cMargenPct',c.margenPct==null?'—':(c.margenPct+'%'));
-  const pill=document.getElementById('pillCierre');if(pill){const e=state.proyecto.estado||'Sin iniciar';pill.textContent=e;pill.style.background=e==='Finalizado'?'color-mix(in srgb,var(--green) 15%,#fff)':'var(--or-soft)';pill.style.color=e==='Finalizado'?'var(--green)':'var(--or-dark)';}
-}
-function onCostoInput(){
-  state.proyecto.tarifaMO=+document.getElementById('cTarifa').value||0;
-  state.proyecto.otrosCostos=+document.getElementById('cOtros').value||0;
-  state.proyecto.venta=+document.getElementById('cVenta').value||0;
-  state.proyecto.fechaCierre=document.getElementById('cFechaCierre').value||'';
-  renderCostos();dirty();
-}
+/* ===== CIERRE ===== */
 function finalizarProyecto(){
   document.getElementById('p_estadosel').value='Finalizado';
   if(!document.getElementById('cFechaCierre').value)document.getElementById('cFechaCierre').value=hoyISO();
@@ -1226,9 +1184,9 @@ function projId(){
   return state.proyecto.id;
 }
 function buildSnapshot(){
-  const st=getStats(),sc=scheduleCalc(),p=state.proyecto,c=getCostos();
+  const st=getStats(),sc=scheduleCalc(),p=state.proyecto;
   const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
-  const dh=c.dh;
+  const dh=state.tecnicos.reduce((a,t)=>a+(t.dias||0),0);
   const MS=86400000;
   const dd=(a,b)=>(a&&b)?Math.round((new Date(b+'T00:00')-new Date(a+'T00:00'))/MS):null;
   const finalizado=(p.estado==='Finalizado');
@@ -1250,9 +1208,6 @@ function buildSnapshot(){
     diasRest: sc.ok?sc.diasRest:null, diasTrans: sc.ok?sc.diasTrans:null,
     expected: sc.ok?sc.expected:null, gap: sc.ok?sc.gap:null,
     diasPlan, diasReales, desvioDias,
-    costoMateriales:c.mat, costoMO:c.mo, otrosCostos:c.otros, costoTotal:c.total,
-    costoPorEquipo: nEq?Math.round(c.total/nEq):0,
-    venta:c.venta, margen:c.margen, margenPct:c.margenPct,
     updatedBy: p.jefe||''
   };
 }
