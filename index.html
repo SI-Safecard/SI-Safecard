@@ -308,6 +308,7 @@
       <div><label>Estado general</label><select id="p_estadosel" onchange="dirty();renderEstado()"><option>Sin iniciar</option><option>En ejecución</option><option>En revisión QC</option><option>Finalizado</option></select></div>
       <div><label>Fecha inicio instalación</label><input type="date" id="p_inicio" oninput="dirty();recalc()"></div>
       <div><label>Fecha término instalación</label><input type="date" id="p_termino" oninput="dirty();recalc()"></div>
+      <div><label>Fecha límite instalación (contrato) <span class="auto-fill">plazo comprometido</span></label><input type="date" id="p_limite" oninput="dirty();recalc()"></div>
       <div><label>Jefe de cuadrilla</label>
         <select id="p_jefe" onchange="onJefeChange()">
           <option value="">Seleccionar…</option>
@@ -621,7 +622,7 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
 }));
 
 /* PROYECTO */
-const PF={p_nombre:'nombre',p_pid:'pid',p_direccion:'direccion',p_ejecutivo:'ejecutivo',p_inicio:'inicio',p_termino:'termino'};
+const PF={p_nombre:'nombre',p_pid:'pid',p_direccion:'direccion',p_ejecutivo:'ejecutivo',p_inicio:'inicio',p_termino:'termino',p_limite:'limite'};
 function pullProyecto(){for(const[el,k]of Object.entries(PF))state.proyecto[k]=document.getElementById(el).value;state.proyecto.estado=document.getElementById('p_estadosel').value;state.proyecto.jefe=document.getElementById('p_jefe').value;}
 function pushProyecto(){for(const[el,k]of Object.entries(PF))document.getElementById(el).value=state.proyecto[k]||'';document.getElementById('p_estadosel').value=state.proyecto.estado||'Sin iniciar';document.getElementById('p_jefe').value=state.proyecto.jefe||'';renderEstado();renderTecAsg();}
 const TECNICOS=['Pedro Rivera','Matías Silva','Sebastián Espinoza','Ciro Forte','Ariel Lazo','Jhon Villegas'];
@@ -1196,7 +1197,7 @@ function hoyISO(){const d=new Date();return d.getFullYear()+'-'+String(d.getMont
 function fmtFecha(f){return new Date(f+'T00:00').toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit',year:'numeric'});}
 function scheduleCalc(){
   const p=state.proyecto,real=getStats().avance;
-  const fin=p.termino||p.plazo||'';
+  const fin=p.limite||p.termino||p.plazo||'';
   let ini=p.inicio||'';
   if(!ini){const fechas=(state.bitacora||[]).map(x=>x.fecha).filter(Boolean).sort();ini=fechas.length?fechas[0]:'';}
   if(!ini||!fin)return{ok:false,real};
@@ -1234,7 +1235,7 @@ function renderBitacora(){
     document.getElementById('bSchedBox').innerHTML=`
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
         <span class="pill" style="background:color-mix(in srgb,${sc.color} 15%,#fff);color:${sc.color};font-size:14px">${sc.estado}</span>
-        <span class="small">${gapTxt} · faltan <b>${sc.diasRest>=0?sc.diasRest:0}</b> día(s)</span></div>
+        <span class="small">${gapTxt} · faltan <b>${sc.diasRest>=0?sc.diasRest:0}</b> día(s) · Fecha límite: <b>${fmtFecha(sc.fin)}</b>${state.proyecto.limite?' <span style="color:var(--or-dark)">(contrato)</span>':''}</span></div>
       <div style="position:relative;height:26px;background:#ECEEF0;border-radius:8px;overflow:hidden">
         <div style="height:100%;width:${sc.real}%;background:${sc.color}"></div>
         <div style="position:absolute;top:-4px;bottom:-4px;left:${sc.expected}%;width:2px;background:#1F2933"></div>
@@ -1244,8 +1245,8 @@ function renderBitacora(){
   }else{
     setText('bDiasTrans','—');setText('bDiasRest','—');setText('bEsper','—');
     pill.textContent='Sin fechas';pill.style.background='var(--or-soft)';pill.style.color='var(--or-dark)';
-    document.getElementById('bSchedBox').innerHTML='<p class="note">Define <b>fecha de inicio</b> y <b>fecha de término</b> en la pestaña Proyecto para calcular el plazo y el estado del cronograma.</p>';
-    document.getElementById('bChart').innerHTML='<p class="empty">Requiere fechas de inicio y término (pestaña Proyecto).</p>';
+    document.getElementById('bSchedBox').innerHTML='<p class="note">Define <b>fecha de inicio</b> y <b>fecha límite (contrato)</b> o <b>fecha de término</b> en la pestaña Proyecto para calcular el plazo y el estado del cronograma.</p>';
+    document.getElementById('bChart').innerHTML='<p class="empty">Requiere fecha de inicio y fecha límite/término (pestaña Proyecto).</p>';
   }
   const hoyN=(state.bitacora||[]).filter(x=>x.fecha===hoyISO()).length;
   document.getElementById('bHoyInfo').textContent=hoyN?('Hoy llevas '+hoyN+' registro(s). Cada "Registrar hoy" agrega un nuevo log.'):'Aún no hay registros para hoy.';
@@ -1314,7 +1315,7 @@ function buildSnapshot(){
     id:projId(), pid:(state.proyecto.pid||'').trim(), nombre:p.nombre||document.getElementById('p_nombre').value||'(sin nombre)',
     direccion:p.direccion||document.getElementById('p_direccion').value||'', comuna:p.comuna||'',
     jefe:p.jefe||'', ejecutivo:p.ejecutivo||'',
-    inicio:p.inicio||'', termino:p.termino||'', plazo:p.plazo||'',
+    inicio:p.inicio||'', termino:p.termino||'', plazo:p.plazo||'', limite:p.limite||'',
     avance:st.avance, cabPct:st.cabPct, qcConf:st.qcConf, qaPct:st.qaPct,
     equiposTotal:nEq, equiposListos:listos, equiposEnTerreno:state.equipos.filter(e=>e.enTerreno).length,
     nTecnicos:state.tecnicos.length, diasHombre:dh,
