@@ -104,6 +104,13 @@
   .terreno-btn{border:1px dashed var(--muted);background:#fff;color:var(--muted);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
   .terreno-btn.on{background:#DCFCE7;border:1px solid var(--green);border-style:solid;color:#166534}
   .eq-coment{flex:1;min-width:180px;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:13px;font-family:inherit}
+  .acta-tg{border-radius:7px;padding:5px 12px;font-weight:800;font-size:12px;border:1.5px solid;cursor:pointer;min-width:44px}
+  .acta-tg.si{background:#DCFCE7;color:#166534;border-color:var(--green)}
+  .acta-tg.no{background:#FEE2E2;color:#991B1B;border-color:var(--nc)}
+  #actaEditor table{font-size:13px}
+  #actaEditor td,#actaEditor th{white-space:nowrap}
+  #actaEditor td input{border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:13px;width:100%;min-width:150px}
+  #actaEditor thead th{position:sticky;top:0;background:#fff;z-index:1}
   .eq-card.done{border-left-color:var(--green);background:linear-gradient(90deg,var(--green-soft),#fff 60%)}
   .eq-card.partial{border-left-color:var(--or)}
   .eq-info{min-width:150px;flex-shrink:0}
@@ -477,6 +484,21 @@
     </div>
     <p class="small" style="margin-top:8px">Al finalizar, el proyecto pasa a la vista “Finalizados” del Panel de Control, donde se ingresan los montos y se calcula la rentabilidad.</p>
   </div>
+  <div class="card">
+    <div class="card-title-bar"><h2>🧾 Acta de Entrega (Recepción Conforme)</h2></div>
+    <p class="hint">Revisa y ajusta el estado de cada equipo (Instalado / Operatividad / Pruebas) y sus comentarios. Luego genera el PDF para el cliente.</p>
+    <div class="row-flex">
+      <div style="flex:1;min-width:200px"><label>Responsable QC</label><input id="actaResp" placeholder="Nombre de quien entrega" oninput="state.proyecto.qcResponsable=this.value;dirty()"></div>
+      <div style="width:200px"><label>Fecha de entrega</label><input type="date" id="actaFecha" oninput="state.proyecto.fechaEntrega=this.value;dirty()"></div>
+    </div>
+    <div class="row-flex" style="margin-top:10px">
+      <button class="btn" onclick="actaReset()">🔄 Cargar/actualizar desde avance</button>
+      <button class="btn" onclick="actaAllYes()">✅ Marcar TODO en SI</button>
+      <button class="btn primary" onclick="generarActa()">🧾 Generar Acta PDF</button>
+    </div>
+    <p class="small" style="margin:9px 0 4px">Toca <b>SI/NO</b> para cambiarlo. Por defecto: Instalado = Montado · Operatividad = Configurado · Pruebas = Probado. Los <b>Switch</b> e <b>Internet</b> no se incluyen en el acta.</p>
+    <div id="actaEditor" class="table-wrap" style="max-height:520px;overflow:auto"></div>
+  </div>
   <div class="card"><h2>📝 Observaciones de cierre</h2><textarea id="cierreObs" placeholder="Pendientes, hallazgos, garantías, próximos pasos…" oninput="dirty()"></textarea></div>
 </section>
 
@@ -594,7 +616,7 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
   t.classList.add('active');document.getElementById('panel-'+t.dataset.tab).classList.add('active');
   if(t.dataset.tab==='fotos')renderFotos();
   if(t.dataset.tab==='bitacora')renderBitacora();
-  if(t.dataset.tab==='cierre')recalc();
+  if(t.dataset.tab==='cierre'){recalc();renderActaEditor();}
   window.scrollTo({top:0,behavior:'smooth'});
 }));
 
@@ -755,7 +777,7 @@ function confirmarImport(){
   let added=0;
   t.querySelectorAll('.impChk').forEach(c=>{if(c.checked){const r=_importRows[c.dataset.i];expandEquipo(r.name,r.qty,r.sector);added+=r.qty;}});
   document.getElementById('importPreview').style.display='none';
-  renderEquipos();renderFotos();recalc();
+  renderEquipos();renderFotos();recalc();renderActaEditor();
   alert(added+' unidades importadas.');
   document.querySelector('.tab[data-tab="avance"]').click();
 }
@@ -1080,7 +1102,86 @@ function generarInforme(){
   setTimeout(()=>window.print(),120);
 }
 
-/* ===== BITÁCORA / CRONOGRAMA ===== */
+const ACTA_EXCL=/switch|internet/i;
+function actaList(){return state.equipos.filter(e=>!ACTA_EXCL.test(e.nombre||''));}
+function actaOf(e){if(!e.acta)e.acta={inst:!!e.etapas[1],oper:!!e.etapas[3],prue:!!e.etapas[4],coment:e.comentario||''};return e.acta;}
+function actaReset(){if(!confirm('¿Actualizar el acta con el estado actual del avance?\nSe sobrescriben los cambios manuales de esta tabla.'))return;state.equipos.forEach(e=>{e.acta={inst:!!e.etapas[1],oper:!!e.etapas[3],prue:!!e.etapas[4],coment:e.comentario||''};});renderActaEditor();dirty();}
+function actaAllYes(){actaList().forEach(e=>{const a=actaOf(e);a.inst=true;a.oper=true;a.prue=true;});renderActaEditor();dirty();}
+function setActa(id,f){const e=state.equipos.find(x=>x.id===id);if(!e)return;const a=actaOf(e);a[f]=!a[f];renderActaEditor();dirty();}
+function setActaComent(id,v){const e=state.equipos.find(x=>x.id===id);if(!e)return;actaOf(e).coment=v;dirty();}
+function renderActaEditor(){
+  const c=document.getElementById('actaEditor');if(!c)return;
+  const list=actaList();
+  if(!list.length){c.innerHTML='<p class="empty">Sin equipos para el acta.</p>';return;}
+  const tg=(v,id,f)=>`<button class="acta-tg ${v?'si':'no'}" onclick="setActa('${id}','${f}')">${v?'SI':'NO'}</button>`;
+  let rows=list.map((e,i)=>{const a=actaOf(e);return `<tr>
+    <td class="center">${1000+i}</td>
+    <td>${esc(e.nombre||'')}</td>
+    <td>${esc(e.sector||'')}</td>
+    <td class="center">${tg(a.inst,e.id,'inst')}</td>
+    <td class="center">${tg(a.oper,e.id,'oper')}</td>
+    <td class="center">${tg(a.prue,e.id,'prue')}</td>
+    <td><input value="${esc(a.coment||'')}" placeholder="Comentario…" onchange="setActaComent('${e.id}',this.value)"></td>
+  </tr>`;}).join('');
+  c.innerHTML=`<table><thead><tr><th class="center" style="width:60px">ID</th><th>Producto</th><th>Sector</th><th class="center">Instalado</th><th class="center">Operatividad</th><th class="center">Pruebas</th><th>Comentarios</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function generarActa(){
+  pullProyecto();
+  const p=state.proyecto;
+  const resp=(p.qcResponsable&&p.qcResponsable.trim())?p.qcResponsable.trim():'Ignacio Fuentes';
+  const fecha=p.fechaEntrega||p.fechaCierre||hoyISO();
+  const fFecha=new Date(fecha+'T00:00').toLocaleDateString('es-CL');
+  const chk='<span style="color:#16A34A;font-weight:800;font-size:11px">✓</span>';
+  const cell=v=>`<td style="text-align:center;border:1px solid #999;padding:2px 3px">${v?chk:''}</td><td style="text-align:center;border:1px solid #999;padding:2px 3px">${v?'':chk}</td>`;
+  const rows=actaList().map((e,i)=>{
+    const a=actaOf(e);
+    return `<tr style="page-break-inside:avoid">
+      <td style="text-align:center;border:1px solid #999;padding:2px 4px">${1000+i}</td>
+      <td style="border:1px solid #999;padding:2px 6px">${esc(e.nombre||'')}</td>
+      <td style="border:1px solid #999;padding:2px 6px;font-weight:600">${esc(e.sector||'')}</td>
+      ${cell(a.inst)}${cell(a.oper)}${cell(a.prue)}
+      <td style="border:1px solid #999;padding:2px 6px;font-size:9px">${esc(a.coment||'')}</td>
+    </tr>`;
+  }).join('');
+  const th='border:1px solid #999;padding:3px 4px;background:#f0f0f0;font-size:9.5px;text-align:center;font-weight:700';
+  document.getElementById('reporte').innerHTML=`<div style="font-family:Arial,Helvetica,sans-serif;color:#1F2933">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div>${LOGO_REPORT}</div>
+      <div style="width:230px;height:44px;background:#F26522;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;letter-spacing:.05em">${esc((p.nombre||'').toUpperCase())}</div>
+    </div>
+    <h1 style="text-align:center;font-size:18px;margin:6px 0 12px">Acta de Entrega de Proyecto</h1>
+    <div style="display:flex;justify-content:space-between;border-top:1px solid #333;border-bottom:1px solid #333;padding:6px 2px;font-size:11px;margin-bottom:12px">
+      <span><b>Responsable QC:</b> ${esc(resp)}</span>
+      <span><b>Fecha de Entrega:</b> ${fFecha}</span>
+      <span><b>Proyecto:</b> ${esc(p.nombre||'—')}</span>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:9.5px">
+      <thead style="display:table-header-group">
+        <tr>
+          <th rowspan="2" style="${th}">ID</th>
+          <th rowspan="2" style="${th};text-align:left">Producto</th>
+          <th rowspan="2" style="${th}">Sector</th>
+          <th colspan="2" style="${th}">Instalado</th>
+          <th colspan="2" style="${th}">Operatividad</th>
+          <th colspan="2" style="${th}">Pruebas</th>
+          <th rowspan="2" style="${th};text-align:left">Comentarios</th>
+        </tr>
+        <tr>
+          <th style="${th}">SI</th><th style="${th}">NO</th>
+          <th style="${th}">SI</th><th style="${th}">NO</th>
+          <th style="${th}">SI</th><th style="${th}">NO</th>
+        </tr>
+      </thead>
+      <tbody>${rows||`<tr><td colspan="10" style="border:1px solid #999;text-align:center;padding:10px">Sin equipos</td></tr>`}</tbody>
+    </table>
+    <div style="display:flex;gap:80px;margin-top:60px;font-size:11px">
+      <div style="flex:1;text-align:center;border-top:1px solid #333;padding-top:6px">Nombre y Firma Safecard</div>
+      <div style="flex:1;text-align:center;border-top:1px solid #333;padding-top:6px">Nombre y Firma Cliente</div>
+    </div>
+    <div style="text-align:right;font-size:9px;color:#999;margin-top:14px">V 2.0</div>
+  </div>`;
+  setTimeout(()=>window.print(),120);
+}
 function getStats(){
   const eq=state.equipos,tot=eq.length;let done=0,total=0;eq.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
   const avance=total?Math.round(done/total*100):0;
@@ -1170,9 +1271,11 @@ function bitChartSVG(sc){
   const leg=`<g font-size="9"><rect x="${W-R-150}" y="${T-2}" width="12" height="3" fill="#F26522"/><text x="${W-R-134}" y="${T+2}" fill="#64748B">Avance real</text><line x1="${W-R-66}" y1="${T}" x2="${W-R-54}" y2="${T}" stroke="#94A3B8" stroke-width="2" stroke-dasharray="4 3"/><text x="${W-R-50}" y="${T+2}" fill="#64748B">Plan</text></g>`;
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${g}<polygon points="${areaPts}" fill="rgba(242,101,34,.09)"/>${plan}${hoyLine}<polyline points="${poly}" fill="none" stroke="#F26522" stroke-width="2.5" stroke-linejoin="round"/>${dots}${xl}${leg}</svg>`;
 }
-function renderAll(){pushProyecto();renderEquipos();renderQC();renderFotos();renderTec();renderIns();document.getElementById('cierreObs').value=state.cierreObs||'';
+function renderAll(){pushProyecto();renderEquipos();renderQC();renderFotos();renderTec();renderIns();renderActaEditor();document.getElementById('cierreObs').value=state.cierreObs||'';
   const g=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
   g('cFechaCierre',state.proyecto.fechaCierre||'');
+  g('actaResp',state.proyecto.qcResponsable||'Ignacio Fuentes');
+  g('actaFecha',state.proyecto.fechaEntrega||'');
   recalc();}
 window.addEventListener('beforeunload',e=>{if(_dirty){e.preventDefault();e.returnValue='';}});
 /* ===== CIERRE ===== */
