@@ -111,6 +111,7 @@
   #actaEditor td,#actaEditor th{white-space:nowrap}
   #actaEditor td input{border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:13px;width:100%;min-width:150px}
   #actaEditor thead th{position:sticky;top:0;background:#fff;z-index:1}
+  .acta-flujo{margin-top:5px;border:1px solid var(--line);border-radius:6px;padding:3px 6px;font-size:12px;color:var(--muted);max-width:170px}
   .eq-card.done{border-left-color:var(--green);background:linear-gradient(90deg,var(--green-soft),#fff 60%)}
   .eq-card.partial{border-left-color:var(--or)}
   .eq-info{min-width:150px;flex-shrink:0}
@@ -584,8 +585,8 @@ function tipoEquipo(name){
   if(/\bmap\b/.test(n))return"Antena Wifi Local Map";
   if(/antena|wifi/.test(n))return"Antena Wifi Local Unifi";
   if(/switch/.test(n)){if(/24/.test(n))return"Switch 24P";if(/\b8\b|8p/.test(n))return"Switch 8P";if(/\b4\b|4p/.test(n))return"Switch 4P";return"Switch 8P";}
-  if(/router/.test(n))return"Router 3G/5G";
-  if(/servidor|internet/.test(n))return"Servidor V2";
+  if(/router|internet/.test(n))return"Router 3G/5G";
+  if(/servidor/.test(n))return"Servidor V2";
   if(/controlador/.test(n))return"Controlador Generico";
   if(/\bpc\b|guardia/.test(n))return"Pc Guardia";
   if(/tablet/.test(n))return"Tablet";
@@ -694,7 +695,15 @@ function extractEquipos(data){
   const pushSector=sec=>{
     if(!sec||!sec.items||typeof sec.items!=='object')return;
     const name=sec.name||sec.nombre||'Sector';
-    for(const key in sec.items){const qty=toNum(sec.items[key])||0;if(qty>0)res.push({sector:name,name:humanize(key),qty});}
+    const ds=(st&&st.dirSplit&&st.dirSplit[sec.id])?st.dirSplit[sec.id]:null;
+    for(const key in sec.items){
+      const qty=toNum(sec.items[key])||0;if(qty<=0)continue;
+      const parts=String(key).split('|');const slug=parts[0];const variant=parts[1]||'';
+      if(/pilar/i.test(key)||slug==='safetouch_veh_curvo')continue; // el pilar es soporte, no equipo
+      const disp=humanize(slug)+(variant?' '+variant:'');
+      const entradaN=(ds&&ds[key]!=null)?toNum(ds[key]):null;
+      res.push({sector:name,name:disp,slug,variant,qty,entradaN});
+    }
   };
   // Formato Safecard: baseSector + sectors[]
   if(st&&(st.baseSector||Array.isArray(st.sectors))){
@@ -776,7 +785,7 @@ function confirmarImport(){
   t.querySelectorAll('input[data-f="name"]').forEach(i=>_importRows[i.dataset.i].name=i.value);
   t.querySelectorAll('input[data-f="qty"]').forEach(i=>_importRows[i.dataset.i].qty=toNum(i.value)||1);
   let added=0;
-  t.querySelectorAll('.impChk').forEach(c=>{if(c.checked){const r=_importRows[c.dataset.i];expandEquipo(r.name,r.qty,r.sector);added+=r.qty;}});
+  t.querySelectorAll('.impChk').forEach(c=>{if(c.checked){const r=_importRows[c.dataset.i];expandEquipo(r);added+=r.qty;}});
   document.getElementById('importPreview').style.display='none';
   renderEquipos();renderFotos();recalc();renderActaEditor();
   alert(added+' unidades importadas.');
@@ -785,7 +794,15 @@ function confirmarImport(){
 function flattenStrings(node,path='',out=[],depth=0){if(depth>8)return out;if(node&&typeof node==='object'){for(const k in node){const v=node[k];if(esStr(v))out.push({key:path?path+'.'+k:k,val:v});else flattenStrings(v,path?path+'.'+k:k,out,depth+1);}}return out;}
 
 /* EQUIPOS */
-function expandEquipo(base,qty,sector){for(let i=1;i<=qty;i++)state.equipos.push(newUnit(base,qty>1?base+' '+i:base,sector||'General'));}
+function expandEquipo(r){
+  const base=r.name,qty=r.qty,sector=r.sector||'General';
+  const entradaN=(r&&r.entradaN!=null)?r.entradaN:null;
+  for(let i=1;i<=qty;i++){
+    const u=newUnit(base,qty>1?base+' '+i:base,sector);
+    if(entradaN!=null)u.flujo=(i<=entradaN?'Entrada':'Salida');
+    state.equipos.push(u);
+  }
+}
 function newUnit(base,nombre,sector){return{id:uid(),base:base,nombre:nombre,sector:sector||'General',etapas:INSTALL_STAGES.map(()=>false),qa:{}};}
 function addEquipoManual(){
   const nm=document.getElementById('addEqName').value.trim();const sec=document.getElementById('addEqSector').value.trim()||'General';const q=toNum(document.getElementById('addEqQty').value)||1;
@@ -796,11 +813,13 @@ function addEquipoManual(){
 }
 function delUnit(id){state.equipos=state.equipos.filter(e=>e.id!==id);state.fotos=state.fotos.filter(f=>f.equipoId!==id);renderEquipos();renderFotos();recalc();dirty();}
 function bySector(){const m=new Map();state.equipos.forEach(e=>{const s=e.sector||'General';if(!m.has(s))m.set(s,[]);m.get(s).push(e);});return m;}
+let _EQNM={};
 let qaUnitOpen=new Set();
 function renderEquipos(){
   const c=document.getElementById('equiposList');
   document.getElementById('equiposEmpty').style.display=state.equipos.length?'none':'block';
   c.innerHTML='';
+  _EQNM={};dispNames(state.equipos).forEach(x=>_EQNM[x.e.id]=x.disp);
   bySector().forEach((items,sector)=>{
     const total=items.length*INSTALL_STAGES.length;
     const done=items.reduce((a,e)=>a+e.etapas.filter(Boolean).length,0);
@@ -822,7 +841,7 @@ function renderEquipos(){
       chips+=`<span class="stage ${e.etapas[4]?'on':''}" onclick="toggleQA('${e.id}')" title="Ver pruebas QA">${e.etapas[4]?'✓ ':''}Probado <small style="opacity:.85">(${qp.done}/${qp.total})</small> ▾</span>`;
       const card=document.createElement('div');card.className='eq-card '+cls;
       card.innerHTML=`<div class="eq-info ${cls}">
-          <div class="nm">${esc(e.nombre)}</div>
+          <div class="nm">${esc(_EQNM[e.id]||e.nombre)}</div>
           <div class="pct"><b>${d}/${n}</b> · ${pct}%${d===n?' ✓':''}</div>
           <div class="eq-mini"><span style="width:${pct}%"></span></div>
         </div>
@@ -840,7 +859,7 @@ function renderEquipos(){
 function qaPanelHtml(e){
   const tests=qaTests(e),p=qaProgress(e);
   const groups={};tests.forEach(t=>{(groups[t.catTitle]=groups[t.catTitle]||[]).push(t);});
-  let h=`<div class="qa-panel"><div class="qa-top"><b>🧪 Pruebas QA · ${esc(e.nombre)}</b>
+  let h=`<div class="qa-panel"><div class="qa-top"><b>🧪 Pruebas QA · ${esc(_EQNM[e.id]||e.nombre)}</b>
     <span class="qa-prog ${(p.total&&p.done===p.total)?'ok':''}">${p.done}/${p.total}</span>
     <button class="qa-mini-btn" onclick="qaAll('${e.id}',true)">Marcar todas</button>
     <button class="qa-mini-btn" onclick="qaAll('${e.id}',false)">Limpiar</button>
@@ -1054,6 +1073,7 @@ function guardarSesion(){pullProyecto();state.cierreObs=document.getElementById(
 function applyLoaded(d){
   state=Object.assign({proyecto:{},equipos:[],qc:{},fotos:[],tecnicos:[],insumos:[],cierreObs:'',bitacora:[]},d);
   if(!state.bitacora)state.bitacora=[];
+  state.equipos=(state.equipos||[]).filter(e=>!/pilar/i.test(e.nombre||''));
   state.equipos.forEach(eq=>{if(!eq.id)eq.id=uid();if(!eq.sector)eq.sector='General';if(!Array.isArray(eq.etapas))eq.etapas=INSTALL_STAGES.map(()=>false);if(eq.etapas.length===4){eq.etapas=[!!eq.cableado,...eq.etapas];}if(eq.etapas.length!==INSTALL_STAGES.length){const n=INSTALL_STAGES.map((_,i)=>!!eq.etapas[i]);eq.etapas=n;}delete eq.cableado;if(!eq.qa)eq.qa={};recomputeProbado(eq);});
   Object.values(state.qc||{}).forEach(q=>{if(Array.isArray(q.evals)&&q.evals.length>1){const v=q.evals.includes('NC')?'NC':q.evals.includes('PC')?'PC':q.evals.includes('C')?'C':null;q.evals=[v];}else if(!Array.isArray(q.evals)){q.evals=[null];}});
   renderAll();
@@ -1104,9 +1124,32 @@ function generarInforme(){
 }
 
 const ACTA_EXCL=/switch|internet/i;
-function actaList(){return state.equipos.filter(e=>!ACTA_EXCL.test(e.nombre||''));}
+function stdNombre(raw){
+  const n=(raw||'').toLowerCase();const es=re=>re.test(n);
+  if(es(/face\s*id/)) return 'Face ID Speedgate';
+  if(es(/speedgate/)){ const m=n.match(/ds\s?\d+/); const mod=m?m[0].toUpperCase().replace(/\s/,''):''; const tipo=es(/doble/)?'Doble':'Simple'; return 'Speedgate '+tipo+(mod?' '+mod:''); }
+  if(es(/lpr/)) return 'Cámara LPR';
+  if(es(/controlador|gen[eé]rico/)){ const m=n.match(/(\d+)\s*r\b/); return 'Controlador Genérico'+(m?' '+m[1]+'R':''); }
+  if(es(/antena|wifi/)) return 'Antena Wifi Local';
+  if(es(/servidor/)) return 'Servidor Local';
+  if(es(/router/)) return 'Router 3G/5G';
+  if(es(/tablet/)) return 'Tablet';
+  if(es(/\bpcg\b|pc\s*guardia|guardia/)) return 'PC Guardia';
+  if(es(/safetouch|isafe/)){ if(es(/met[aá]lic|carcasa|exterior/)) return 'Safetouch Metálico Externo'; return 'Safetouch'; }
+  return String(raw||'').replace(/\s*\d+$/,'');
+}
+function esPilar(e){return /pilar/i.test(e.nombre||'');}
+function flujoDe(e){return e.flujo||(e.acta&&e.acta.flujo)||'';}
+function dispNames(list){
+  const cnt={},seen={};
+  list.forEach(e=>{const k=(e.sector||'')+'|'+stdNombre(e.nombre)+'|'+flujoDe(e);cnt[k]=(cnt[k]||0)+1;});
+  return list.map(e=>{const b=stdNombre(e.nombre);const f=flujoDe(e);const nm=b+(f?' '+f:'');const k=(e.sector||'')+'|'+b+'|'+f;let d=nm;if(cnt[k]>1){seen[k]=(seen[k]||0)+1;d=nm+' '+seen[k];}return{e,disp:d};});
+}
+function actaList(){return state.equipos.filter(e=>!ACTA_EXCL.test(e.nombre||'')&&!esPilar(e));}
+function actaRows(){return dispNames(actaList());}
+function setActaFlujo(id,v){const e=state.equipos.find(x=>x.id===id);if(!e)return;actaOf(e).flujo=v;renderActaEditor();dirty();}
 function actaOf(e){if(!e.acta)e.acta={inst:!!e.etapas[1],oper:!!e.etapas[3],prue:!!e.etapas[4],coment:e.comentario||''};return e.acta;}
-function actaReset(){if(!confirm('¿Actualizar el acta con el estado actual del avance?\nSe sobrescriben los cambios manuales de esta tabla.'))return;state.equipos.forEach(e=>{e.acta={inst:!!e.etapas[1],oper:!!e.etapas[3],prue:!!e.etapas[4],coment:e.comentario||''};});renderActaEditor();dirty();}
+function actaReset(){if(!confirm('¿Actualizar el acta con el estado actual del avance?\nSe sobrescriben los cambios manuales de esta tabla.'))return;state.equipos.forEach(e=>{const f=(e.acta&&e.acta.flujo)||'';e.acta={inst:!!e.etapas[1],oper:!!e.etapas[3],prue:!!e.etapas[4],coment:e.comentario||'',flujo:f};});renderActaEditor();dirty();}
 function actaAllYes(){actaList().forEach(e=>{const a=actaOf(e);a.inst=true;a.oper=true;a.prue=true;});renderActaEditor();dirty();}
 function setActa(id,f){const e=state.equipos.find(x=>x.id===id);if(!e)return;const a=actaOf(e);a[f]=!a[f];renderActaEditor();dirty();}
 function setActaComent(id,v){const e=state.equipos.find(x=>x.id===id);if(!e)return;actaOf(e).coment=v;dirty();}
@@ -1114,10 +1157,11 @@ function renderActaEditor(){
   const c=document.getElementById('actaEditor');if(!c)return;
   const list=actaList();
   if(!list.length){c.innerHTML='<p class="empty">Sin equipos para el acta.</p>';return;}
+  const rowsData=actaRows();
   const tg=(v,id,f)=>`<button class="acta-tg ${v?'si':'no'}" onclick="setActa('${id}','${f}')">${v?'SI':'NO'}</button>`;
-  let rows=list.map((e,i)=>{const a=actaOf(e);return `<tr>
+  let rows=rowsData.map(({e,disp},i)=>{const a=actaOf(e);return `<tr>
     <td class="center">${1000+i}</td>
-    <td>${esc(e.nombre||'')}</td>
+    <td>${esc(disp)}</td>
     <td>${esc(e.sector||'')}</td>
     <td class="center">${tg(a.inst,e.id,'inst')}</td>
     <td class="center">${tg(a.oper,e.id,'oper')}</td>
@@ -1134,11 +1178,11 @@ function generarActa(){
   const fFecha=new Date(fecha+'T00:00').toLocaleDateString('es-CL');
   const chk='<span style="color:#16A34A;font-weight:800;font-size:11px">✓</span>';
   const cell=v=>`<td style="text-align:center;border:1px solid #999;padding:2px 3px">${v?chk:''}</td><td style="text-align:center;border:1px solid #999;padding:2px 3px">${v?'':chk}</td>`;
-  const rows=actaList().map((e,i)=>{
+  const rows=actaRows().map(({e,disp},i)=>{
     const a=actaOf(e);
     return `<tr style="page-break-inside:avoid">
       <td style="text-align:center;border:1px solid #999;padding:2px 4px">${1000+i}</td>
-      <td style="border:1px solid #999;padding:2px 6px">${esc(e.nombre||'')}</td>
+      <td style="border:1px solid #999;padding:2px 6px">${esc(disp)}</td>
       <td style="border:1px solid #999;padding:2px 6px;font-weight:600">${esc(e.sector||'')}</td>
       ${cell(a.inst)}${cell(a.oper)}${cell(a.prue)}
       <td style="border:1px solid #999;padding:2px 6px;font-size:9px">${esc(a.coment||'')}</td>
@@ -1328,16 +1372,18 @@ function buildSnapshot(){
   };
 }
 function setSyncStatus(txt,color){const el=document.getElementById('bSyncStatus');if(el){el.textContent=txt;el.style.color=color||'var(--muted)';}}
+function syncAllowed(){return (state.bitacora&&state.bitacora.length>0)||state.proyecto.estado==='Finalizado';}
 async function syncNow(silent){
   if(!window.SafecardSync||!window.SafecardSync.enabled){setSyncStatus('⚠ Sincronización no configurada','var(--pc)');if(!silent)alert('La sincronización con el Panel aún no está configurada. Debes pegar la config de Firebase en este archivo (ver instrucciones del Panel de Control).');return;}
   if(!state.equipos.length){setSyncStatus('Nada que sincronizar aún');return;}
+  if(!syncAllowed()){setSyncStatus('El proyecto se cargará al Panel al registrar el primer avance','var(--muted)');if(!silent)alert('El proyecto se carga al Panel de Control con el PRIMER registro de avance.\n\nPulsa “＋ Registrar hoy” en la Bitácora para cargarlo.');return;}
   try{
     setSyncStatus('Sincronizando…','var(--or-dark)');
     await window.SafecardSync.push(buildSnapshot());
     const h=new Date();setSyncStatus('✓ Sincronizado '+String(h.getHours()).padStart(2,'0')+':'+String(h.getMinutes()).padStart(2,'0'),'var(--green)');
   }catch(e){setSyncStatus('✗ Error al sincronizar: '+(e.message||e),'var(--nc)');}
 }
-window.addEventListener('safecard-sync-ready',()=>{if(state.equipos.length)syncNow(true);});
+window.addEventListener('safecard-sync-ready',()=>{if(state.equipos.length&&syncAllowed())syncNow(true);});
 /* ===== AUTO-GUARDADO LOCAL (IndexedDB) ===== */
 const IDB_DB='safecard_seg',IDB_STORE='estado',IDB_KEY='current';
 function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open(IDB_DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(IDB_STORE);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
