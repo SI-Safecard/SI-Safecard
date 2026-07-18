@@ -301,6 +301,18 @@
       <button class="btn primary" style="background:var(--or);color:#fff;border-color:var(--or)" onclick="document.getElementById('fileProyecto').click()">⬆️ Cargar Detalle de Proyecto (.json)</button>
       <span class="small" id="cargaInfo" style="margin-left:10px"></span>
     </div>
+    <div style="margin-bottom:16px;padding:11px 13px;background:var(--or-soft);border:1px solid var(--or);border-radius:12px">
+      <div class="small" style="font-weight:700;color:var(--or-dark);margin-bottom:8px">📥 Cargar avance / Detalle</div>
+      <div class="row-flex">
+        <button class="btn primary" style="background:var(--or);color:#fff;border-color:var(--or)" onclick="cargarDrive()">🟢 Cargar desde Google Drive</button>
+        <button class="btn" onclick="document.getElementById('fileSesion').click()">📂 Cargar archivo (celular/PC)</button>
+      </div>
+      <div class="row-flex" style="margin-top:8px">
+        <button class="btn" onclick="guardarNube()">☁️⬆️ Guardar en la nube</button>
+        <button class="btn" onclick="cargarNube()">☁️⬇️ Cargar de la nube</button>
+      </div>
+      <p class="small" style="margin:8px 0 0">Desde Google Drive puedes abrir tanto el <b>Detalle de Proyecto</b> como un <b>avance</b> guardado; se detecta automáticamente. Requiere internet y abrir la app desde su dirección web.</p>
+    </div>
     <div class="grid c2">
       <div><label>Nombre del proyecto</label><input id="p_nombre" oninput="dirty()"></div>
       <div><label>ID de proyecto <span class="auto-fill">clave única en el Panel</span></label><input id="p_pid" placeholder="Ej: EBOSA-MATTA-2026" oninput="dirty()"><div class="small" style="margin-top:3px">Mantén el mismo ID entre días para actualizar el mismo proyecto (no crear uno nuevo).</div></div>
@@ -1083,6 +1095,79 @@ async function guardarSesion(){
   }
   const blob=new Blob([json],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();_dirty=false;
 }
+async function guardarNube(){
+  if(!window.SafecardCloud||!window.SafecardCloud.enabled){alert('La nube no está disponible.\n\nAbre la app desde su dirección web (https / GitHub Pages) con internet, no desde un archivo local.');return;}
+  pullProyecto();state.cierreObs=document.getElementById('cierreObs').value;
+  const id=projId();
+  let st=JSON.parse(JSON.stringify(state));
+  let payload={nombre:state.proyecto.nombre||'',pid:state.proyecto.pid||'',updatedBy:state.proyecto.jefe||'',state:st,sinFotos:false};
+  if(JSON.stringify(payload).length>900000){st.fotos=[];payload.state=st;payload.sinFotos=true;}
+  try{
+    await window.SafecardCloud.save(id,payload);
+    alert('✅ Avance guardado en la nube.'+(payload.sinFotos?'\n\n(Las fotos no se subieron por tamaño; quedan solo en este dispositivo.)':'')+'\n\nAhora puedes cargarlo en otro dispositivo con “☁️ Cargar de la nube”.');
+  }catch(e){alert('No se pudo guardar en la nube: '+(e.message||e));}
+}
+async function cargarNube(){
+  if(!window.SafecardCloud||!window.SafecardCloud.enabled){alert('La nube no está disponible.\n\nAbre la app desde su dirección web (https / GitHub Pages) con internet, no desde un archivo local.');return;}
+  let list;
+  try{list=await window.SafecardCloud.list();}catch(e){alert('No se pudo leer la nube: '+(e.message||e));return;}
+  if(!list||!list.length){alert('No hay avances en la nube todavía.\n\nEn el dispositivo donde tienes el avance, usa “☁️ Guardar en la nube”.');return;}
+  list.sort((a,b)=>((b.updatedAt&&b.updatedAt.seconds)||0)-((a.updatedAt&&a.updatedAt.seconds)||0));
+  let msg='Escribe el número del avance a cargar:\n\n';
+  list.forEach((x,i)=>{const f=(x.updatedAt&&x.updatedAt.seconds)?new Date(x.updatedAt.seconds*1000).toLocaleString('es-CL'):'';msg+=(i+1)+') '+(x.nombre||x.pid||x.id)+(f?'  ·  '+f:'')+(x.sinFotos?'  (sin fotos)':'')+'\n';});
+  const sel=prompt(msg,'1');if(sel==null)return;
+  const idx=parseInt(sel,10)-1;if(isNaN(idx)||idx<0||idx>=list.length){alert('Selección inválida.');return;}
+  try{
+    const data=await window.SafecardCloud.load(list[idx].id);
+    if(!data||!data.state){alert('No se pudo cargar el avance.');return;}
+    if(!confirm('¿Cargar “'+(list[idx].nombre||list[idx].id)+'”?\nSe reemplazará lo que tengas abierto ahora.'))return;
+    applyLoaded(data.state);_dirty=false;autosave();
+    alert('✅ Avance cargado desde la nube'+(data.sinFotos?' (sin fotos).':'.'));
+  }catch(e){alert('No se pudo cargar: '+(e.message||e));}
+}
+
+/* ===== GOOGLE DRIVE (Picker) ===== */
+let _gpickerReady=false,_gtokenClient=null,_gtoken=null;
+function driveConfigOk(){return window.GOOGLE_CLIENT_ID&&window.GOOGLE_API_KEY&&!/PEGA_AQUI/.test(window.GOOGLE_CLIENT_ID)&&!/PEGA_AQUI/.test(window.GOOGLE_API_KEY);}
+function cargarDrive(){
+  if(!driveConfigOk()){alert('Falta configurar Google Drive.\n\nHay que pegar el Client ID y la API Key de Google en el archivo (ver instrucciones al final del archivo / pídele a soporte).');return;}
+  if(!window.google||!google.accounts||!google.accounts.oauth2){alert('Google aún no carga. Verifica tu conexión y reintenta en unos segundos.');return;}
+  if(!_gtokenClient){
+    _gtokenClient=google.accounts.oauth2.initTokenClient({
+      client_id:window.GOOGLE_CLIENT_ID,
+      scope:'https://www.googleapis.com/auth/drive.readonly',
+      callback:r=>{if(r&&r.access_token){_gtoken=r.access_token;abrirPicker();}else alert('No se pudo autorizar Google Drive.');}
+    });
+  }
+  if(_gtoken)abrirPicker(); else _gtokenClient.requestAccessToken({prompt:''});
+}
+function abrirPicker(){
+  if(!window.gapi){alert('Google Picker aún no carga. Reintenta en unos segundos.');return;}
+  const build=()=>{
+    _gpickerReady=true;
+    const v=new google.picker.DocsView(google.picker.ViewId.DOCS).setIncludeFolders(true).setSelectFolderEnabled(false);
+    const picker=new google.picker.PickerBuilder()
+      .setOAuthToken(_gtoken)
+      .setDeveloperKey(window.GOOGLE_API_KEY)
+      .addView(v)
+      .addView(new google.picker.DocsView().setEnableDrives(true).setIncludeFolders(true))
+      .setCallback(pickerCb).build();
+    picker.setVisible(true);
+  };
+  if(_gpickerReady)build(); else gapi.load('picker',build);
+}
+async function pickerCb(data){
+  if(!data||data.action!==google.picker.Action.PICKED)return;
+  const file=data.docs&&data.docs[0];if(!file)return;
+  try{
+    const res=await fetch('https://www.googleapis.com/drive/v3/files/'+file.id+'?alt=media&supportsAllDrives=true',{headers:{Authorization:'Bearer '+_gtoken}});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const txt=await res.text();
+    const obj=JSON.parse(txt);
+    if(obj&&obj._safecard&&(obj.state||obj.fields)){ parseDetalle(obj,file.name); }
+    else { applyLoaded(obj);_dirty=false;autosave();alert('✅ Avance cargado desde Google Drive.'); }
+  }catch(e){alert('No se pudo leer el archivo de Drive: '+(e.message||e)+'\n\nAsegúrate de elegir un archivo .json de Safecard.');}
+}
 function applyLoaded(d){
   state=Object.assign({proyecto:{},equipos:[],qc:{},fotos:[],tecnicos:[],insumos:[],cierreObs:'',bitacora:[]},d);
   if(!state.bitacora)state.bitacora=[];
@@ -1428,13 +1513,26 @@ window.FIREBASE_CONFIG = {
   messagingSenderId: "105572979218",
   appId: "1:105572979218:web:0a92d9753fc4724eec3ecb"
 };
+/* ====== GOOGLE DRIVE (Picker) ======
+   1) Google Cloud Console → mismo proyecto de Firebase (dashboard-safecard).
+   2) APIs y servicios → Biblioteca → habilita "Google Picker API" y "Google Drive API".
+   3) Credenciales → Crear credenciales → ID de cliente de OAuth → Aplicación web.
+        Orígenes autorizados de JavaScript: https://si-safecard.github.io
+        Copia el "ID de cliente" abajo (termina en .apps.googleusercontent.com).
+   4) Credenciales → Crear credenciales → Clave de API. Cópiala abajo.
+   5) Pantalla de consentimiento OAuth: agrega a tu equipo como usuarios de prueba
+      (o publica la app) para que puedan autorizar. */
+window.GOOGLE_CLIENT_ID = "722203246514-2ljn6due7pt0ihiv8d00ffmu2bbp0if8.apps.googleusercontent.com";
+window.GOOGLE_API_KEY   = "AIzaSyCyag0lPAOWJTqj0x1Bj-iaOGO3bVXOxnQ";
 </script>
+<script src="https://apis.google.com/js/api.js" async defer></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script type="module">
   const FB=window.FIREBASE_CONFIG;
   if(FB && FB.apiKey){
     try{
       const {initializeApp}=await import("https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js");
-      const {getFirestore,doc,setDoc,serverTimestamp}=await import("https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js");
+      const {getFirestore,doc,setDoc,getDoc,getDocs,collection,serverTimestamp}=await import("https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js");
       const {getAuth,signInAnonymously}=await import("https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js");
       const app=initializeApp(FB);
       const db=getFirestore(app);
@@ -1447,13 +1545,19 @@ window.FIREBASE_CONFIG = {
           await setDoc(ref, Object.assign({}, snap, {updatedAt: serverTimestamp()}), {merge:true});
         }
       };
+      window.SafecardCloud={
+        enabled:true,
+        async save(id,payload){ await setDoc(doc(db,'avances',id), Object.assign({},payload,{updatedAt:serverTimestamp()}), {merge:false}); },
+        async load(id){ const s=await getDoc(doc(db,'avances',id)); return s.exists()?s.data():null; },
+        async list(){ const q=await getDocs(collection(db,'avances')); const out=[]; q.forEach(d=>{const x=d.data(); out.push({id:d.id, nombre:x.nombre||'', pid:x.pid||'', updatedAt:x.updatedAt||null, sinFotos:!!x.sinFotos});}); return out; }
+      };
       window.dispatchEvent(new Event('safecard-sync-ready'));
     }catch(e){
       console.warn('Firebase no disponible:',e);
-      window.SafecardSync={enabled:false};
+      window.SafecardSync={enabled:false};window.SafecardCloud={enabled:false};
     }
   }else{
-    window.SafecardSync={enabled:false};
+    window.SafecardSync={enabled:false};window.SafecardCloud={enabled:false};
     window.dispatchEvent(new Event('safecard-sync-ready'));
   }
 </script>
