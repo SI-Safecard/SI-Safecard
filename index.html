@@ -1069,7 +1069,20 @@ function renderDashboard(){
 
 /* GUARDAR / CARGAR */
 let _dirty=false;function dirty(){_dirty=true;autosave();}
-function guardarSesion(){pullProyecto();state.cierreObs=document.getElementById('cierreObs').value;const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');const nm=(state.proyecto.nombre||'avance').replace(/[^\w\-]+/g,'_');a.href=URL.createObjectURL(blob);a.download='Seguimiento_'+nm+'_'+new Date().toISOString().slice(0,10)+'.json';a.click();_dirty=false;}
+async function guardarSesion(){
+  pullProyecto();state.cierreObs=document.getElementById('cierreObs').value;
+  const json=JSON.stringify(state,null,2);
+  const nm=(state.proyecto.nombre||'avance').replace(/[^\w\-]+/g,'_');
+  const fname='Seguimiento_'+nm+'_'+new Date().toISOString().slice(0,10)+'.json';
+  if(window.showSaveFilePicker){
+    try{
+      const handle=await window.showSaveFilePicker({suggestedName:fname,types:[{description:'Avance Safecard (JSON)',accept:{'application/json':['.json']}}]});
+      const w=await handle.createWritable();await w.write(new Blob([json],{type:'application/json'}));await w.close();
+      _dirty=false;return;
+    }catch(e){if(e&&e.name==='AbortError')return;}
+  }
+  const blob=new Blob([json],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();_dirty=false;
+}
 function applyLoaded(d){
   state=Object.assign({proyecto:{},equipos:[],qc:{},fotos:[],tecnicos:[],insumos:[],cierreObs:'',bitacora:[]},d);
   if(!state.bitacora)state.bitacora=[];
@@ -1118,7 +1131,6 @@ function generarInforme(){
     <div class="r-sec"><h2>Control de calidad</h2><table><thead><tr><th>Ítem</th><th>Punto a revisar</th><th>Responsable</th><th class="center">Estado</th></tr></thead><tbody>${qcRows}</tbody></table><p style="font-size:11px;margin-top:6px;color:#777">No conformidades: <b style="color:#DC2626">${nc}</b> · Conformidad global: <b>${conf}%</b></p></div>
     <div class="r-sec"><h2>Observaciones y hallazgos</h2>${obsHtml}${state.cierreObs?`<p style="font-size:12px;margin-top:8px"><b>Cierre:</b> ${esc(state.cierreObs)}</p>`:''}</div>
     <div class="r-sec"><h2>Respaldo fotográfico</h2>${fotosHtml}</div>
-    <div style="margin-top:30px;display:flex;gap:40px;font-size:12px"><div style="flex:1;border-top:1px solid #999;padding-top:6px;text-align:center">Ejecutó (Safecard)</div><div style="flex:1;border-top:1px solid #999;padding-top:6px;text-align:center">Recibe conforme (Cliente)</div></div>
   </div>`;
   setTimeout(()=>window.print(),120);
 }
