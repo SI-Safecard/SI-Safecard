@@ -32,6 +32,13 @@
   .head-wrap{display:flex;align-items:center;gap:12px;flex-wrap:wrap;max-width:1200px;margin:0 auto}
   .head-row{display:flex;align-items:center;gap:14px}
   .head-actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .sesion-bar{display:flex;align-items:center;gap:6px}
+  .sesion-bar .ses-user{color:#fff;font-size:12px;font-weight:700;background:rgba(255,255,255,.18);padding:5px 9px;border-radius:8px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .btn-sm{background:#fff;color:var(--or-dark);border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer}
+  .btn-sm.login{background:#fff;color:var(--or-dark)}
+  body.readonly::before{content:'👁️ Modo solo lectura — inicia sesión como jefe de cuadrilla para actualizar el avance';position:fixed;bottom:0;left:0;right:0;background:#8A6D0B;color:#fff;font-size:13px;font-weight:700;text-align:center;padding:8px;z-index:9999}
+  body.readonly main{padding-bottom:46px}
+  @media print{body.readonly::before{display:none}}
   .btn{border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.13);color:#fff;padding:8px 13px;border-radius:8px;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;transition:background .15s}
   .btn:hover{background:rgba(255,255,255,.24)}
   .btn.primary{background:#fff;color:var(--or-dark);border-color:#fff}
@@ -275,6 +282,7 @@
       <button class="btn" onclick="nuevoProyecto()">➕ Nuevo</button>
       <button class="btn" onclick="guardarSesion()">💾 Guardar</button>
       <button class="btn primary" onclick="generarInforme()">📄 Informe</button>
+      <span id="sesionBar" class="sesion-bar"></span>
     </div>
   </div>
 </header>
@@ -1096,15 +1104,18 @@ async function guardarSesion(){
   const blob=new Blob([json],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();_dirty=false;
 }
 async function guardarNube(){
+  if(!requiereEditar())return;
   if(!window.SafecardCloud||!window.SafecardCloud.enabled){alert('La nube no está disponible.\n\nAbre la app desde su dirección web (https / GitHub Pages) con internet, no desde un archivo local.');return;}
   pullProyecto();state.cierreObs=document.getElementById('cierreObs').value;
   const id=projId();
   let st=JSON.parse(JSON.stringify(state));
-  let payload={nombre:state.proyecto.nombre||'',pid:state.proyecto.pid||'',updatedBy:state.proyecto.jefe||'',state:st,sinFotos:false};
-  if(JSON.stringify(payload).length>900000){st.fotos=[];payload.state=st;payload.sinFotos=true;}
+  let sinFotos=false;
+  let stStr=JSON.stringify(st);
+  if(stStr.length>900000){st.fotos=[];stStr=JSON.stringify(st);sinFotos=true;}
+  let payload={nombre:state.proyecto.nombre||'',pid:state.proyecto.pid||'',updatedBy:state.proyecto.jefe||'',stateJson:stStr,sinFotos:sinFotos};
   try{
     await window.SafecardCloud.save(id,payload);
-    alert('✅ Avance guardado en la nube.'+(payload.sinFotos?'\n\n(Las fotos no se subieron por tamaño; quedan solo en este dispositivo.)':'')+'\n\nAhora puedes cargarlo en otro dispositivo con “☁️ Cargar de la nube”.');
+    alert('✅ Avance guardado en la nube.'+(sinFotos?'\n\n(Las fotos no se subieron por tamaño; quedan solo en este dispositivo.)':'')+'\n\nAhora puedes cargarlo en otro dispositivo con “☁️ Cargar de la nube”.');
   }catch(e){alert('No se pudo guardar en la nube: '+(e.message||e));}
 }
 async function cargarNube(){
@@ -1119,11 +1130,18 @@ async function cargarNube(){
   const idx=parseInt(sel,10)-1;if(isNaN(idx)||idx<0||idx>=list.length){alert('Selección inválida.');return;}
   try{
     const data=await window.SafecardCloud.load(list[idx].id);
-    if(!data||!data.state){alert('No se pudo cargar el avance.');return;}
+    const st=estadoDeNube(data);
+    if(!st){alert('No se pudo cargar el avance.');return;}
     if(!confirm('¿Cargar “'+(list[idx].nombre||list[idx].id)+'”?\nSe reemplazará lo que tengas abierto ahora.'))return;
-    applyLoaded(data.state);_dirty=false;autosave();
+    applyLoaded(st);_dirty=false;autosave();
     alert('✅ Avance cargado desde la nube'+(data.sinFotos?' (sin fotos).':'.'));
   }catch(e){alert('No se pudo cargar: '+(e.message||e));}
+}
+function estadoDeNube(data){
+  if(!data)return null;
+  if(data.stateJson){ try{return JSON.parse(data.stateJson);}catch(e){return null;} }
+  if(data.state)return data.state; // compatibilidad con formato anterior
+  return null;
 }
 
 /* ===== GOOGLE DRIVE (Picker) ===== */
@@ -1355,6 +1373,7 @@ function scheduleCalc(){
   return{ok:true,ini,fin,total,diasTrans,diasRest,expected,real,gap,estado,color,d0,d1,hoy};
 }
 function registrarAvance(){
+  if(!requiereEditar())return;
   const st=getStats(),f=hoyISO(),por=document.getElementById('bPor').value||'',nota=document.getElementById('bNota').value||'';
   const now=new Date();const hora=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
   state.bitacora=state.bitacora||[];
@@ -1422,6 +1441,7 @@ function renderAll(){pushProyecto();renderEquipos();renderQC();renderFotos();ren
 window.addEventListener('beforeunload',e=>{if(_dirty){e.preventDefault();e.returnValue='';}});
 /* ===== CIERRE ===== */
 function finalizarProyecto(){
+  if(!requiereEditar())return;
   document.getElementById('p_estadosel').value='Finalizado';
   if(!document.getElementById('cFechaCierre').value)document.getElementById('cFechaCierre').value=hoyISO();
   pullProyecto();state.proyecto.fechaCierre=document.getElementById('cFechaCierre').value;
@@ -1471,6 +1491,7 @@ function buildSnapshot(){
 function setSyncStatus(txt,color){const el=document.getElementById('bSyncStatus');if(el){el.textContent=txt;el.style.color=color||'var(--muted)';}}
 function syncAllowed(){return (state.bitacora&&state.bitacora.length>0)||state.proyecto.estado==='Finalizado';}
 async function syncNow(silent){
+  if(!puedeEditar()){ if(!silent)requiereEditar(); return; }
   if(!window.SafecardSync||!window.SafecardSync.enabled){setSyncStatus('⚠ Sincronización no configurada','var(--pc)');if(!silent)alert('La sincronización con el Panel aún no está configurada. Debes pegar la config de Firebase en este archivo (ver instrucciones del Panel de Control).');return;}
   if(!state.equipos.length){setSyncStatus('Nada que sincronizar aún');return;}
   if(!syncAllowed()){setSyncStatus('El proyecto se cargará al Panel al registrar el primer avance','var(--muted)');if(!silent)alert('El proyecto se carga al Panel de Control con el PRIMER registro de avance.\n\nPulsa “＋ Registrar hoy” en la Bitácora para cargarlo.');return;}
@@ -1496,7 +1517,63 @@ async function nuevoProyecto(){
   _dirty=false;renderAll();
   alert('Proyecto nuevo. Carga el Detalle de Proyecto o agrega equipos.');
 }
+/* ===== SESIÓN / LOGIN POR CORREO ===== */
+let _authClient=null,_usuario=null;
+function usuarioGuardado(){try{return JSON.parse(localStorage.getItem('sc_user')||'null');}catch(e){return null;}}
+function sesion(){return _usuario||usuarioGuardado();}
+function puedeEditar(){const u=sesion();return !!(u&&u.editor);}
+function esEditor(email){return (window.EDITORES||[]).map(x=>x.toLowerCase()).includes((email||'').toLowerCase());}
+function requiereEditar(){ if(puedeEditar())return true; alert('Solo un jefe de cuadrilla (o el jefe de área) puede actualizar el avance.\n\nInicia sesión con tu correo Safecard con el botón 🔑 Iniciar sesión.'); return false; }
+function iniciarSesion(){
+  if(!window.google||!google.accounts||!google.accounts.oauth2){alert('Google aún no carga. Verifica tu conexión y reintenta.');return;}
+  if(!_authClient){
+    _authClient=google.accounts.oauth2.initTokenClient({
+      client_id:window.GOOGLE_CLIENT_ID,
+      scope:'openid email profile',
+      callback:async r=>{
+        if(!r||!r.access_token){alert('No se pudo iniciar sesión.');return;}
+        try{
+          const res=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+r.access_token}});
+          const info=await res.json();
+          const email=(info.email||'').toLowerCase();
+          _usuario={email,nombre:info.name||email,editor:esEditor(email)};
+          try{localStorage.setItem('sc_user',JSON.stringify(_usuario));}catch(e){}
+          renderSesion();
+          if(!_usuario.editor)alert('Sesión iniciada como '+email+'.\nNo tienes permiso de edición (solo jefes de cuadrilla). Quedas en modo SOLO LECTURA.');
+        }catch(e){alert('No se pudo leer tu perfil: '+(e.message||e));}
+      }
+    });
+  }
+  _authClient.requestAccessToken({prompt:''});
+}
+function cerrarSesion(){_usuario=null;try{localStorage.removeItem('sc_user');}catch(e){}renderSesion();}
+function renderSesion(){
+  const u=sesion();const el=document.getElementById('sesionBar');
+  document.body.classList.toggle('readonly',!puedeEditar());
+  if(!el)return;
+  if(u){el.innerHTML=`<span class="ses-user" title="${esc(u.email)}">${u.editor?'✅':'👁️'} ${esc((u.nombre||u.email).split(' ')[0])}${u.editor?'':' · solo lectura'}</span><button class="btn-sm" onclick="cerrarSesion()">Salir</button>`;}
+  else{el.innerHTML=`<button class="btn-sm login" onclick="iniciarSesion()">🔑 Iniciar sesión</button>`;}
+}
+
+/* ===== DEEP-LINK: cargar proyecto desde ?proyecto=<id> ===== */
+async function cargarProyectoDesdeURL(){
+  const pid=new URLSearchParams(location.search).get('proyecto');
+  if(!pid)return false;
+  for(let i=0;i<25 && (!window.SafecardCloud||!window.SafecardCloud.enabled);i++){await new Promise(r=>setTimeout(r,300));}
+  if(!window.SafecardCloud||!window.SafecardCloud.enabled){alert('No hay conexión a la nube para abrir el proyecto. Ábrelo con internet.');return false;}
+  try{
+    const data=await window.SafecardCloud.load(pid);
+    const st=estadoDeNube(data);
+    if(st){applyLoaded(st);_dirty=false;return true;}
+    alert('Este proyecto aún no tiene un avance guardado en la nube.\nLa cuadrilla debe guardarlo una vez desde la app (☁️ Guardar en la nube o registrar avance).');
+  }catch(e){alert('No se pudo abrir el proyecto desde la nube: '+(e.message||e));}
+  return false;
+}
+
 (async function init(){
+  renderSesion();
+  const desdeURL=await cargarProyectoDesdeURL();
+  if(desdeURL)return;
   let saved=null;try{saved=await idbLoad();}catch(e){}
   if(saved&&((saved.equipos&&saved.equipos.length)||(saved.proyecto&&saved.proyecto.nombre))){applyLoaded(saved);}
   else{renderAll();}
@@ -1524,6 +1601,8 @@ window.FIREBASE_CONFIG = {
       (o publica la app) para que puedan autorizar. */
 window.GOOGLE_CLIENT_ID = "722203246514-2ljn6due7pt0ihiv8d00ffmu2bbp0if8.apps.googleusercontent.com";
 window.GOOGLE_API_KEY   = "AIzaSyCyag0lPAOWJTqj0x1Bj-iaOGO3bVXOxnQ";
+/* Correos que PUEDEN editar/actualizar el avance (jefes de cuadrilla + jefe de área). El resto: solo lectura. */
+window.EDITORES = ["nicolas.jara@safecard.cl","fabian.pavez@safecard.cl","francisco.morales@safecard.cl","ignacio.fuentes@safecard.cl"];
 </script>
 <script src="https://apis.google.com/js/api.js" async defer></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -1537,7 +1616,7 @@ window.GOOGLE_API_KEY   = "AIzaSyCyag0lPAOWJTqj0x1Bj-iaOGO3bVXOxnQ";
       const app=initializeApp(FB);
       const db=getFirestore(app);
       const auth=getAuth(app);
-      signInAnonymously(auth).catch(e=>console.warn('Auth anónima falló:',e.code));
+      try{ await signInAnonymously(auth); }catch(e){ console.warn('Auth anónima falló:',e.code); }
       window.SafecardSync={
         enabled:true,
         async push(snap){
