@@ -281,7 +281,7 @@
       <button class="btn" onclick="document.getElementById('fileSesion').click()">📂 Cargar</button>
       <button class="btn" onclick="nuevoProyecto()">➕ Nuevo</button>
       <button class="btn" onclick="guardarSesion()">💾 Guardar</button>
-      <button class="btn primary" onclick="generarInforme()">📄 Informe</button>
+      <button class="btn primary" id="btnInforme" onclick="generarInforme()">📄 Informe</button>
       <span id="sesionBar" class="sesion-bar"></span>
     </div>
   </div>
@@ -527,7 +527,7 @@
 </main>
 
 <div id="reporte"></div>
-<input type="file" id="fileEvidencia" accept="image/*" capture="environment" hidden>
+<input type="file" id="fileEvidencia" accept="image/*" hidden>
 <input type="file" id="fileMulti" accept="image/*" multiple hidden>
 
 <script>
@@ -1197,45 +1197,72 @@ function applyLoaded(d){
 document.getElementById('fileSesion').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{applyLoaded(JSON.parse(r.result));_dirty=false;autosave();alert('Avance cargado.');}catch(err){alert('Archivo inválido: '+err.message);}};r.readAsText(f);e.target.value='';});
 
 /* INFORME PDF */
-function generarInforme(){
-  pullProyecto();state.cierreObs=document.getElementById('cierreObs').value;const p=state.proyecto;
-  const tot=state.equipos.length;
-  let done=0,tt=0;state.equipos.forEach(e=>{tt+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
-  const av=tt?Math.round(done/tt*100):0;const cabReady=state.equipos.filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
-  const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
-  let pts=0,maxAll=0,nc=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;q.evals.forEach(v=>{if(v==='NC')nc++;});});
-  const conf=maxAll?Math.round(pts/maxAll*100):0;
-  const ini=p.inicio,fin=p.termino;let dias=0;if(ini&&fin){dias=Math.round((new Date(fin)-new Date(ini))/86400000)+1;if(dias<0)dias=0;}
-  const fmtD=d=>d?new Date(d+'T00:00').toLocaleDateString('es-CL'):'—';
-  const stB=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">C</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">PC</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">NC</span>':'<span style="color:#aaa">—</span>';
-  const nCols=INSTALL_STAGES.length+2;
-  let eqRows='';bySector().forEach((items,sector)=>{eqRows+=`<tr class="sec-row"><td colspan="${nCols}">${esc(sector)}</td></tr>`;items.forEach(e=>{eqRows+=`<tr><td>${esc(e.nombre)}</td>${e.etapas.map(s=>`<td class="center">${s?'✓':'—'}</td>`).join('')}<td class="center">${Math.round(e.etapas.filter(Boolean).length/INSTALL_STAGES.length*100)}%</td></tr>`;});});
-  const stWord=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">Conforme</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">Observación</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">No conforme</span>':'<span style="color:#aaa">Pendiente</span>';
-  let qcRows=QC_DEFS.map(d=>{const q=state.qc[d.code]||{evals:[null]};return `<tr><td>${d.code}</td><td>${d.name}</td><td>${esc((state.qc[d.code]||{}).resp||'—')}</td><td class="center">${stWord(q.evals[0])}</td></tr>`;}).join('');
-  const ncList=QC_DEFS.map(d=>({d,o:(state.qc[d.code]||{}).obs})).filter(x=>x.o);
-  let obsHtml=ncList.length?('<ul style="margin:0;padding-left:18px;font-size:12px">'+ncList.map(x=>`<li><b>${x.d.code}:</b> ${esc(x.o)}</li>`).join('')+'</ul>'):'<p class="small">Sin observaciones registradas.</p>';
-  const fotosOrd=[...state.equipos.map(e=>{const f=state.fotos.find(x=>x.equipoId===e.id);return f?{f,cap:e.sector+' · '+e.nombre}:null;}).filter(Boolean),...state.fotos.filter(f=>f.cat==='electrico').map(f=>({f,cap:'Circuito eléctrico'})),...state.fotos.filter(f=>f.cat==='internet').map(f=>({f,cap:'Internet / conectividad'})),...state.fotos.filter(f=>f.cat==='otros').map(f=>({f,cap:'Otros'}))];
-  let fotosHtml=fotosOrd.length?('<div class="r-photos">'+fotosOrd.map(o=>`<div class="r-photo"><img src="${o.f.data}"><div class="cap">${esc(o.cap)}</div></div>`).join('')+'</div>'):'<p class="small">Sin fotografías cargadas.</p>';
-  document.getElementById('reporte').innerHTML=`<div>
-    <div class="r-head"><div>${LOGO_REPORT}</div>
-      <div class="r-meta"><b style="font-size:13px;color:#1F2933">INFORME DE INSTALACIÓN Y CONFORMIDAD</b><br>Emitido: ${new Date().toLocaleDateString('es-CL')}<br>Safecard Access Technologies</div></div>
-    <div class="r-sec"><h2>Datos del proyecto</h2><div class="r-info">
-      <div><b>Proyecto:</b> ${esc(p.nombre||'—')}</div><div><b>Dirección:</b> ${esc(p.direccion||'—')}</div>
-      <div><b>Ejecutivo comercial:</b> ${esc(p.ejecutivo||'—')}</div><div><b>Estado:</b> ${esc(p.estado||'—')}</div>
-      <div><b>Jefe de cuadrilla:</b> ${esc(p.jefe||'—')}</div><div><b>Periodo:</b> ${fmtD(ini)} – ${fmtD(fin)} (${dias} día/s)</div></div></div>
-    <div class="r-sec"><h2>Resumen de ejecución</h2><div class="r-kpis">
-      <div class="r-kpi"><div class="v">${av}%</div><div class="l">Avance total</div></div>
-      <div class="r-kpi"><div class="v">${cabPct}%</div><div class="l">Cableado</div></div>
-      <div class="r-kpi"><div class="v">${conf}%</div><div class="l">Conformidad QC</div></div>
-      <div class="r-kpi"><div class="v">${tot}</div><div class="l">Equipos</div></div>
-      <div class="r-kpi"><div class="v">${dias}</div><div class="l">Días</div></div>
-      <div class="r-kpi"><div class="v">${state.tecnicos.length}</div><div class="l">Técnicos</div></div></div></div>
-    <div class="r-sec"><h2>Estado de equipos instalados</h2><table><thead><tr><th>Equipo</th>${INSTALL_STAGES.map(s=>`<th class="center">${s}</th>`).join('')}<th class="center">Avance</th></tr></thead><tbody>${eqRows||`<tr><td colspan="${nCols}" class="center">Sin equipos</td></tr>`}</tbody></table></div>
-    <div class="r-sec"><h2>Control de calidad</h2><table><thead><tr><th>Ítem</th><th>Punto a revisar</th><th>Responsable</th><th class="center">Estado</th></tr></thead><tbody>${qcRows}</tbody></table><p style="font-size:11px;margin-top:6px;color:#777">No conformidades: <b style="color:#DC2626">${nc}</b> · Conformidad global: <b>${conf}%</b></p></div>
-    <div class="r-sec"><h2>Observaciones y hallazgos</h2>${obsHtml}${state.cierreObs?`<p style="font-size:12px;margin-top:8px"><b>Cierre:</b> ${esc(state.cierreObs)}</p>`:''}</div>
-    <div class="r-sec"><h2>Respaldo fotográfico</h2>${fotosHtml}</div>
-  </div>`;
-  setTimeout(()=>window.print(),120);
+function thumbFromDataUrl(dataUrl, maxSize, quality){
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      let w=img.width,h=img.height;
+      if(w>maxSize||h>maxSize){const s=Math.min(maxSize/w,maxSize/h);w=Math.round(w*s);h=Math.round(h*s);}
+      const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      resolve(cv.toDataURL('image/jpeg',quality));
+    };
+    img.onerror=()=>resolve(dataUrl); // si algo falla, usamos la original igual
+    img.src=dataUrl;
+  });
+}
+async function generarInforme(){
+  const btn=document.getElementById('btnInforme');
+  const btnTxt=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='⏳ Generando…';}
+  await new Promise(r=>setTimeout(r,20)); // deja que el botón pinte el estado "Generando…" antes del trabajo pesado
+  try{
+    pullProyecto();state.cierreObs=document.getElementById('cierreObs').value;const p=state.proyecto;
+    const tot=state.equipos.length;
+    let done=0,tt=0;state.equipos.forEach(e=>{tt+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
+    const av=tt?Math.round(done/tt*100):0;const cabReady=state.equipos.filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
+    const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
+    let pts=0,maxAll=0,nc=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;q.evals.forEach(v=>{if(v==='NC')nc++;});});
+    const conf=maxAll?Math.round(pts/maxAll*100):0;
+    const ini=p.inicio,fin=p.termino;let dias=0;if(ini&&fin){dias=Math.round((new Date(fin)-new Date(ini))/86400000)+1;if(dias<0)dias=0;}
+    const fmtD=d=>d?new Date(d+'T00:00').toLocaleDateString('es-CL'):'—';
+    const stB=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">C</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">PC</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">NC</span>':'<span style="color:#aaa">—</span>';
+    const nCols=INSTALL_STAGES.length+2;
+    let eqRows='';bySector().forEach((items,sector)=>{eqRows+=`<tr class="sec-row"><td colspan="${nCols}">${esc(sector)}</td></tr>`;items.forEach(e=>{eqRows+=`<tr><td>${esc(e.nombre)}</td>${e.etapas.map(s=>`<td class="center">${s?'✓':'—'}</td>`).join('')}<td class="center">${Math.round(e.etapas.filter(Boolean).length/INSTALL_STAGES.length*100)}%</td></tr>`;});});
+    const stWord=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">Conforme</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">Observación</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">No conforme</span>':'<span style="color:#aaa">Pendiente</span>';
+    let qcRows=QC_DEFS.map(d=>{const q=state.qc[d.code]||{evals:[null]};return `<tr><td>${d.code}</td><td>${d.name}</td><td>${esc((state.qc[d.code]||{}).resp||'—')}</td><td class="center">${stWord(q.evals[0])}</td></tr>`;}).join('');
+    const ncList=QC_DEFS.map(d=>({d,o:(state.qc[d.code]||{}).obs})).filter(x=>x.o);
+    let obsHtml=ncList.length?('<ul style="margin:0;padding-left:18px;font-size:12px">'+ncList.map(x=>`<li><b>${x.d.code}:</b> ${esc(x.o)}</li>`).join('')+'</ul>'):'<p class="small">Sin observaciones registradas.</p>';
+    const fotosOrd=[...state.equipos.map(e=>{const f=state.fotos.find(x=>x.equipoId===e.id);return f?{f,cap:e.sector+' · '+e.nombre}:null;}).filter(Boolean),...state.fotos.filter(f=>f.cat==='electrico').map(f=>({f,cap:'Circuito eléctrico'})),...state.fotos.filter(f=>f.cat==='internet').map(f=>({f,cap:'Internet / conectividad'})),...state.fotos.filter(f=>f.cat==='otros').map(f=>({f,cap:'Otros'}))];
+    // Miniaturas livianas SOLO para este informe (no se guardan): en el PDF cada foto
+    // mide ~120px de alto, así que no tiene sentido incrustar la versión de 1280px guardada.
+    // Esto es lo que hacía lento el botón "Informe", sobre todo en el teléfono.
+    const thumbs = await Promise.all(fotosOrd.map(o=>thumbFromDataUrl(o.f.data, 380, 0.55)));
+    let fotosHtml=fotosOrd.length?('<div class="r-photos">'+fotosOrd.map((o,i)=>`<div class="r-photo"><img src="${thumbs[i]}"><div class="cap">${esc(o.cap)}</div></div>`).join('')+'</div>'):'<p class="small">Sin fotografías cargadas.</p>';
+    document.getElementById('reporte').innerHTML=`<div>
+      <div class="r-head"><div>${LOGO_REPORT}</div>
+        <div class="r-meta"><b style="font-size:13px;color:#1F2933">INFORME DE INSTALACIÓN Y CONFORMIDAD</b><br>Emitido: ${new Date().toLocaleDateString('es-CL')}<br>Safecard Access Technologies</div></div>
+      <div class="r-sec"><h2>Datos del proyecto</h2><div class="r-info">
+        <div><b>Proyecto:</b> ${esc(p.nombre||'—')}</div><div><b>Dirección:</b> ${esc(p.direccion||'—')}</div>
+        <div><b>Ejecutivo comercial:</b> ${esc(p.ejecutivo||'—')}</div><div><b>Estado:</b> ${esc(p.estado||'—')}</div>
+        <div><b>Jefe de cuadrilla:</b> ${esc(p.jefe||'—')}</div><div><b>Periodo:</b> ${fmtD(ini)} – ${fmtD(fin)} (${dias} día/s)</div></div></div>
+      <div class="r-sec"><h2>Resumen de ejecución</h2><div class="r-kpis">
+        <div class="r-kpi"><div class="v">${av}%</div><div class="l">Avance total</div></div>
+        <div class="r-kpi"><div class="v">${cabPct}%</div><div class="l">Cableado</div></div>
+        <div class="r-kpi"><div class="v">${conf}%</div><div class="l">Conformidad QC</div></div>
+        <div class="r-kpi"><div class="v">${tot}</div><div class="l">Equipos</div></div>
+        <div class="r-kpi"><div class="v">${dias}</div><div class="l">Días</div></div>
+        <div class="r-kpi"><div class="v">${state.tecnicos.length}</div><div class="l">Técnicos</div></div></div></div>
+      <div class="r-sec"><h2>Estado de equipos instalados</h2><table><thead><tr><th>Equipo</th>${INSTALL_STAGES.map(s=>`<th class="center">${s}</th>`).join('')}<th class="center">Avance</th></tr></thead><tbody>${eqRows||`<tr><td colspan="${nCols}" class="center">Sin equipos</td></tr>`}</tbody></table></div>
+      <div class="r-sec"><h2>Control de calidad</h2><table><thead><tr><th>Ítem</th><th>Punto a revisar</th><th>Responsable</th><th class="center">Estado</th></tr></thead><tbody>${qcRows}</tbody></table><p style="font-size:11px;margin-top:6px;color:#777">No conformidades: <b style="color:#DC2626">${nc}</b> · Conformidad global: <b>${conf}%</b></p></div>
+      <div class="r-sec"><h2>Observaciones y hallazgos</h2>${obsHtml}${state.cierreObs?`<p style="font-size:12px;margin-top:8px"><b>Cierre:</b> ${esc(state.cierreObs)}</p>`:''}</div>
+      <div class="r-sec"><h2>Respaldo fotográfico</h2>${fotosHtml}</div>
+    </div>`;
+    setTimeout(()=>{ window.print(); if(btn){btn.disabled=false;btn.textContent=btnTxt;} },120);
+  }catch(err){
+    alert('No se pudo generar el informe: '+(err&&err.message?err.message:err));
+    if(btn){btn.disabled=false;btn.textContent=btnTxt;}
+  }
 }
 
 const ACTA_EXCL=/switch|internet/i;
@@ -1304,7 +1331,7 @@ function generarActa(){
     </tr>`;
   }).join('');
   const th='border:1px solid #999;padding:3px 4px;background:#f0f0f0;font-size:9.5px;text-align:center;font-weight:700';
-  document.getElementById('reporte').innerHTML=`<div style="font-family:Arial,Helvetica,sans-serif;color:#1F2933">
+  const bodyHtml=`<div style="font-family:Arial,Helvetica,sans-serif;color:#1F2933;max-width:900px;margin:0 auto;padding:24px 18px 40px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div>${LOGO_REPORT}</div>
       <div style="width:230px;height:44px;background:#F26522;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;letter-spacing:.05em">${esc((p.nombre||'').toUpperCase())}</div>
@@ -1334,13 +1361,58 @@ function generarActa(){
       </thead>
       <tbody>${rows||`<tr><td colspan="10" style="border:1px solid #999;text-align:center;padding:10px">Sin equipos</td></tr>`}</tbody>
     </table>
-    <div style="display:flex;gap:80px;margin-top:60px;font-size:11px">
-      <div style="flex:1;text-align:center;border-top:1px solid #333;padding-top:6px">Nombre y Firma Safecard</div>
-      <div style="flex:1;text-align:center;border-top:1px solid #333;padding-top:6px">Nombre y Firma Cliente</div>
+    <div style="display:flex;gap:40px;margin-top:60px">
+      <div style="flex:1;text-align:center">
+        <canvas id="padSafecard" class="sig-pad" width="380" height="150" style="width:100%;height:150px;border:1px solid #999;border-radius:6px;background:#fff;touch-action:none"></canvas>
+        <input type="text" id="nombreSafecard" value="Ignacio Fuentes" placeholder="Nombre completo" style="margin-top:6px;width:100%;text-align:center;border:none;border-top:1px solid #333;outline:none;padding-top:6px;font-size:11px;font-family:inherit;background:transparent;color:#1F2933">
+        <div style="font-size:9px;color:#777;margin-top:2px">Nombre y Firma Safecard</div>
+        <button class="no-print" onclick="clearPad('padSafecard')" style="margin-top:6px;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #ccc;background:#f5f5f5;cursor:pointer">🧹 Limpiar firma</button>
+      </div>
+      <div style="flex:1;text-align:center">
+        <canvas id="padCliente" class="sig-pad" width="380" height="150" style="width:100%;height:150px;border:1px solid #999;border-radius:6px;background:#fff;touch-action:none"></canvas>
+        <input type="text" id="nombreCliente" value="" placeholder="Nombre completo" style="margin-top:6px;width:100%;text-align:center;border:none;border-top:1px solid #333;outline:none;padding-top:6px;font-size:11px;font-family:inherit;background:transparent;color:#1F2933">
+        <div style="font-size:9px;color:#777;margin-top:2px">Nombre y Firma Cliente</div>
+        <button class="no-print" onclick="clearPad('padCliente')" style="margin-top:6px;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #ccc;background:#f5f5f5;cursor:pointer">🧹 Limpiar firma</button>
+      </div>
     </div>
-    <div style="text-align:right;font-size:9px;color:#999;margin-top:14px">V 2.0</div>
+    <div style="text-align:right;font-size:9px;color:#999;margin-top:14px">V 2.1</div>
   </div>`;
-  setTimeout(()=>window.print(),120);
+  const popupHtml='<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'
+    +'<meta name="viewport" content="width=device-width,initial-scale=1.0">'
+    +'<title>Acta de Entrega · '+String(p.nombre||'Proyecto').replace(/</g,'&lt;')+'</title>'
+    +'<style>'
+    +'*{box-sizing:border-box}body{margin:0;background:#F3F4F6;font-family:Arial,Helvetica,sans-serif}'
+    +'.topbar{position:sticky;top:0;background:#1F2933;color:#fff;padding:10px 16px;display:flex;gap:10px;align-items:center;z-index:9}'
+    +'.topbar b{flex:1;font-size:13px}'
+    +'.topbar button{font-size:13px;font-weight:700;padding:8px 14px;border-radius:8px;border:none;cursor:pointer}'
+    +'.btn-print{background:#F26522;color:#fff}.btn-close{background:#3A4756;color:#fff}'
+    +'.sheet{background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.12);margin:18px auto;max-width:900px}'
+    +'@media print{.topbar{display:none}.sheet{box-shadow:none;margin:0}body{background:#fff}}'
+    +'</style></head><body>'
+    +'<div class="topbar no-print"><b>Acta de Entrega — firma abajo y luego imprime o guarda como PDF</b>'
+    +'<button class="btn-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>'
+    +'<button class="btn-close" onclick="window.close()">✕ Cerrar</button></div>'
+    +'<div class="sheet">'+bodyHtml+'</div>'
+    +'<script>'
+    +'function initPad(id){var canvas=document.getElementById(id);var ctx=canvas.getContext("2d");'
+    +'var rect=canvas.getBoundingClientRect();var ratio=window.devicePixelRatio||1;'
+    +'canvas.width=rect.width*ratio;canvas.height=rect.height*ratio;ctx.scale(ratio,ratio);'
+    +'ctx.lineWidth=2;ctx.lineCap="round";ctx.strokeStyle="#1F2933";'
+    +'var drawing=false,last=null;'
+    +'function pos(e){var r=canvas.getBoundingClientRect();var t=(e.touches&&e.touches[0])||e;return{x:t.clientX-r.left,y:t.clientY-r.top};}'
+    +'function start(e){drawing=true;last=pos(e);e.preventDefault();}'
+    +'function move(e){if(!drawing)return;var p=pos(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;e.preventDefault();}'
+    +'function end(){drawing=false;}'
+    +'canvas.addEventListener("mousedown",start);canvas.addEventListener("mousemove",move);window.addEventListener("mouseup",end);'
+    +'canvas.addEventListener("touchstart",start,{passive:false});canvas.addEventListener("touchmove",move,{passive:false});canvas.addEventListener("touchend",end);'
+    +'canvas._ctx=ctx;}'
+    +'function clearPad(id){var canvas=document.getElementById(id);var ctx=canvas._ctx||canvas.getContext("2d");ctx.clearRect(0,0,canvas.width,canvas.height);}'
+    +'initPad("padSafecard");initPad("padCliente");'
+    +'<\/script></body></html>';
+  const blob=new Blob([popupHtml],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  const win=window.open(url,'_blank');
+  if(!win){alert('El navegador bloqueó la ventana nueva. Permite las ventanas emergentes para este sitio e inténtalo de nuevo.');}
 }
 function getStats(){
   const eq=state.equipos,tot=eq.length;let done=0,total=0;eq.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
