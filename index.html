@@ -952,7 +952,7 @@ function renderFotos(){
       const foto=state.fotos.find(f=>f.equipoId===e.id);
       const slot=document.createElement('div');slot.className='ev-slot'+(foto?' has':'');
       slot.innerHTML=`<div class="ev-thumb" onclick="pedirEvidencia('${e.id}')">${foto?`<img src="${foto.data}">`:`<div class="ph"><span class="big">📸</span><span>Subir foto</span></div>`}${foto?`<button class="ev-del" onclick="event.stopPropagation();delFoto('${foto.id}')">✕</button>`:''}</div>
-        <div class="ev-meta"><span class="nm">${esc(e.nombre)}</span><span class="ev-tag ${foto?'ok':'no'}">${foto?'OK':'falta'}</span></div>`;
+        <div class="ev-meta"><span class="nm">${esc(_EQNM[e.id]||e.nombre)}</span><span class="ev-tag ${foto?'ok':'no'}">${foto?'OK':'falta'}</span></div>`;
       g.appendChild(slot);
     });
     cont.appendChild(g);
@@ -1228,12 +1228,13 @@ async function generarInforme(){
     const fmtD=d=>d?new Date(d+'T00:00').toLocaleDateString('es-CL'):'—';
     const stB=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">C</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">PC</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">NC</span>':'<span style="color:#aaa">—</span>';
     const nCols=INSTALL_STAGES.length+2;
-    let eqRows='';bySector().forEach((items,sector)=>{eqRows+=`<tr class="sec-row"><td colspan="${nCols}">${esc(sector)}</td></tr>`;items.forEach(e=>{eqRows+=`<tr><td>${esc(e.nombre)}</td>${e.etapas.map(s=>`<td class="center">${s?'✓':'—'}</td>`).join('')}<td class="center">${Math.round(e.etapas.filter(Boolean).length/INSTALL_STAGES.length*100)}%</td></tr>`;});});
+    const _eqDisp={};dispNames(state.equipos).forEach(x=>_eqDisp[x.e.id]=x.disp);
+    let eqRows='';bySector().forEach((items,sector)=>{eqRows+=`<tr class="sec-row"><td colspan="${nCols}">${esc(sector)}</td></tr>`;items.forEach(e=>{eqRows+=`<tr><td>${esc(_eqDisp[e.id]||e.nombre)}</td>${e.etapas.map(s=>`<td class="center">${s?'✓':'—'}</td>`).join('')}<td class="center">${Math.round(e.etapas.filter(Boolean).length/INSTALL_STAGES.length*100)}%</td></tr>`;});});
     const stWord=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">Conforme</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">Observación</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">No conforme</span>':'<span style="color:#aaa">Pendiente</span>';
     let qcRows=QC_DEFS.map(d=>{const q=state.qc[d.code]||{evals:[null]};return `<tr><td>${d.code}</td><td>${d.name}</td><td>${esc((state.qc[d.code]||{}).resp||'—')}</td><td class="center">${stWord(q.evals[0])}</td></tr>`;}).join('');
     const ncList=QC_DEFS.map(d=>({d,o:(state.qc[d.code]||{}).obs})).filter(x=>x.o);
     let obsHtml=ncList.length?('<ul style="margin:0;padding-left:18px;font-size:12px">'+ncList.map(x=>`<li><b>${x.d.code}:</b> ${esc(x.o)}</li>`).join('')+'</ul>'):'<p class="small">Sin observaciones registradas.</p>';
-    const fotosOrd=[...state.equipos.map(e=>{const f=state.fotos.find(x=>x.equipoId===e.id);return f?{f,cap:e.sector+' · '+e.nombre}:null;}).filter(Boolean),...state.fotos.filter(f=>f.cat==='electrico').map(f=>({f,cap:'Circuito eléctrico'})),...state.fotos.filter(f=>f.cat==='internet').map(f=>({f,cap:'Internet / conectividad'})),...state.fotos.filter(f=>f.cat==='otros').map(f=>({f,cap:'Otros'}))];
+    const fotosOrd=[...state.equipos.map(e=>{const f=state.fotos.find(x=>x.equipoId===e.id);return f?{f,cap:e.sector+' · '+(_eqDisp[e.id]||e.nombre)}:null;}).filter(Boolean),...state.fotos.filter(f=>f.cat==='electrico').map(f=>({f,cap:'Circuito eléctrico'})),...state.fotos.filter(f=>f.cat==='internet').map(f=>({f,cap:'Internet / conectividad'})),...state.fotos.filter(f=>f.cat==='otros').map(f=>({f,cap:'Otros'}))];
     // Miniaturas livianas SOLO para este informe (no se guardan): en el PDF cada foto
     // mide ~120px de alto, así que no tiene sentido incrustar la versión de 1280px guardada.
     // Esto es lo que hacía lento el botón "Informe", sobre todo en el teléfono.
@@ -1282,10 +1283,11 @@ function stdNombre(raw){
 }
 function esPilar(e){return /pilar/i.test(e.nombre||'');}
 function flujoDe(e){return e.flujo||(e.acta&&e.acta.flujo)||'';}
+function baseSinNumero(raw){return String(raw||'').replace(/\s+\d+$/,'').trim();}
 function dispNames(list){
   const cnt={},seen={};
-  list.forEach(e=>{const k=(e.sector||'')+'|'+stdNombre(e.nombre)+'|'+flujoDe(e);cnt[k]=(cnt[k]||0)+1;});
-  return list.map(e=>{const b=stdNombre(e.nombre);const f=flujoDe(e);const nm=b+(f?' '+f:'');const k=(e.sector||'')+'|'+b+'|'+f;let d=nm;if(cnt[k]>1){seen[k]=(seen[k]||0)+1;d=nm+' '+seen[k];}return{e,disp:d};});
+  list.forEach(e=>{const k=(e.sector||'')+'|'+baseSinNumero(e.nombre)+'|'+flujoDe(e);cnt[k]=(cnt[k]||0)+1;});
+  return list.map(e=>{const b=baseSinNumero(e.nombre);const f=flujoDe(e);const nm=b+(f?' '+f:'');const k=(e.sector||'')+'|'+b+'|'+f;let d=nm;if(cnt[k]>1){seen[k]=(seen[k]||0)+1;d=nm+' '+seen[k];}return{e,disp:d};});
 }
 function actaList(){return state.equipos.filter(e=>!ACTA_EXCL.test(e.nombre||'')&&!esPilar(e));}
 function actaRows(){return dispNames(actaList());}
