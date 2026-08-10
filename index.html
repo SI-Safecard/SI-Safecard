@@ -1114,9 +1114,13 @@ async function guardarSesion(){
   }
   const blob=new Blob([json],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();_dirty=false;
 }
-async function guardarNube(){
+async function guardarNube(silent){
   if(!requiereEditar())return;
-  if(!window.SafecardCloud||!window.SafecardCloud.enabled){alert('La nube no está disponible.\n\nAbre la app desde su dirección web (https / GitHub Pages) con internet, no desde un archivo local.');return;}
+  if(!window.SafecardCloud||!window.SafecardCloud.enabled){
+    if(!silent){alert('La nube no está disponible.\n\nAbre la app desde su dirección web (https / GitHub Pages) con internet, no desde un archivo local.');}
+    else{setSyncStatus('⚠ Sin conexión a la nube — este registro quedó solo en este dispositivo por ahora','var(--pc)');}
+    return;
+  }
   pullProyecto();state.cierreObs=document.getElementById('cierreObs').value;
   const id=projId();
   let st=JSON.parse(JSON.stringify(state));
@@ -1126,8 +1130,12 @@ async function guardarNube(){
   let payload={nombre:state.proyecto.nombre||'',pid:state.proyecto.pid||'',updatedBy:state.proyecto.jefe||'',stateJson:stStr,sinFotos:sinFotos};
   try{
     await window.SafecardCloud.save(id,payload);
-    alert('✅ Avance guardado en la nube.'+(sinFotos?'\n\n(Las fotos no se subieron por tamaño; quedan solo en este dispositivo.)':'')+'\n\nAhora puedes cargarlo en otro dispositivo con “☁️ Cargar de la nube”.');
-  }catch(e){alert('No se pudo guardar en la nube: '+(e.message||e));}
+    if(!silent){alert('✅ Avance guardado en la nube.'+(sinFotos?'\n\n(Las fotos no se subieron por tamaño; quedan solo en este dispositivo.)':'')+'\n\nAhora puedes cargarlo en otro dispositivo con “☁️ Cargar de la nube”.');}
+    else{setSyncStatus('☁️ Bitácora guardada en la nube — mañana puedes seguir desde aquí'+(sinFotos?' (fotos no incluidas, muy pesado)':''),'var(--green)');}
+  }catch(e){
+    if(!silent){alert('No se pudo guardar en la nube: '+(e.message||e));}
+    else{setSyncStatus('⚠ No se pudo guardar en la nube: '+(e.message||e),'var(--nc)');}
+  }
 }
 async function cargarNube(){
   if(!window.SafecardCloud||!window.SafecardCloud.enabled){alert('La nube no está disponible.\n\nAbre la app desde su dirección web (https / GitHub Pages) con internet, no desde un archivo local.');return;}
@@ -1467,6 +1475,7 @@ function registrarAvance(){
   state.bitacora=state.bitacora||[];
   state.bitacora.push({id:uid(),fecha:f,hora,ts:Date.now(),avance:st.avance,cab:st.cabPct,qc:st.qcConf,qa:st.qaPct,por,nota});
   document.getElementById('bNota').value='';renderBitacora();dirty();syncNow(true);
+  guardarNube(true); // guarda el avance completo en la nube automáticamente, para poder continuar mañana desde este mismo registro
 }
 function delBitacora(id){if(!confirm('¿Eliminar este registro?'))return;state.bitacora=(state.bitacora||[]).filter(x=>(x.id||x.fecha)!==id);renderBitacora();dirty();}
 function renderBitacora(){
