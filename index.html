@@ -123,6 +123,8 @@
   .eq-card.partial{border-left-color:var(--or)}
   .eq-info{min-width:150px;flex-shrink:0}
   .eq-info .nm{font-weight:700;font-size:14px;line-height:1.2}
+  .eq-info .nm-edit{font-weight:700;font-size:14px;line-height:1.2;border:none;border-bottom:1px dashed transparent;background:transparent;color:inherit;font-family:inherit;padding:0;width:100%;outline:none}
+  .eq-info .nm-edit:hover,.eq-info .nm-edit:focus{border-bottom-color:var(--or)}
   .eq-info .pct{font-size:11px;font-weight:800;color:var(--muted);margin-top:3px}
   .eq-info .pct b{color:var(--or-dark)}
   .eq-info.done .pct b{color:var(--green)}
@@ -832,6 +834,15 @@ function addEquipoManual(){
   renderEquipos();renderFotos();recalc();dirty();
 }
 function delUnit(id){state.equipos=state.equipos.filter(e=>e.id!==id);state.fotos=state.fotos.filter(f=>f.equipoId!==id);renderEquipos();renderFotos();recalc();dirty();}
+function renombrarEquipo(id,valor){
+  const e=state.equipos.find(x=>x.id===id);
+  if(!e)return;
+  const nuevo=(valor||'').trim();
+  if(!nuevo){renderEquipos();return;} // no se permite dejarlo vacío
+  e.nombre=nuevo;
+  e.nombreManual=true; // ya no se le vuelve a aplicar el armado automático (base + Entrada/Salida + N°)
+  renderEquipos();renderFotos();dirty();
+}
 function bySector(){const m=new Map();state.equipos.forEach(e=>{const s=e.sector||'General';if(!m.has(s))m.set(s,[]);m.get(s).push(e);});return m;}
 let _EQNM={};
 let qaUnitOpen=new Set();
@@ -861,7 +872,7 @@ function renderEquipos(){
       chips+=`<span class="stage ${e.etapas[4]?'on':''}" onclick="toggleQA('${e.id}')" title="Ver pruebas QA">${e.etapas[4]?'✓ ':''}Probado <small style="opacity:.85">(${qp.done}/${qp.total})</small> ▾</span>`;
       const card=document.createElement('div');card.className='eq-card '+cls;
       card.innerHTML=`<div class="eq-info ${cls}">
-          <div class="nm">${esc(_EQNM[e.id]||e.nombre)}</div>
+          <input class="nm-edit" type="text" value="${esc(_EQNM[e.id]||e.nombre)}" title="Toca para editar el nombre del equipo" onclick="event.stopPropagation()" onchange="renombrarEquipo('${e.id}',this.value)">
           <div class="pct"><b>${d}/${n}</b> · ${pct}%${d===n?' ✓':''}</div>
           <div class="eq-mini"><span style="width:${pct}%"></span></div>
         </div>
@@ -1286,8 +1297,11 @@ function flujoDe(e){return e.flujo||(e.acta&&e.acta.flujo)||'';}
 function baseSinNumero(raw){return String(raw||'').replace(/\s+\d+$/,'').trim();}
 function dispNames(list){
   const cnt={},seen={};
-  list.forEach(e=>{const k=(e.sector||'')+'|'+baseSinNumero(e.nombre)+'|'+flujoDe(e);cnt[k]=(cnt[k]||0)+1;});
-  return list.map(e=>{const b=baseSinNumero(e.nombre);const f=flujoDe(e);const nm=b+(f?' '+f:'');const k=(e.sector||'')+'|'+b+'|'+f;let d=nm;if(cnt[k]>1){seen[k]=(seen[k]||0)+1;d=nm+' '+seen[k];}return{e,disp:d};});
+  list.forEach(e=>{if(e.nombreManual)return;const k=(e.sector||'')+'|'+baseSinNumero(e.nombre)+'|'+flujoDe(e);cnt[k]=(cnt[k]||0)+1;});
+  return list.map(e=>{
+    if(e.nombreManual)return{e,disp:e.nombre};
+    const b=baseSinNumero(e.nombre);const f=flujoDe(e);const nm=b+(f?' '+f:'');const k=(e.sector||'')+'|'+b+'|'+f;let d=nm;if(cnt[k]>1){seen[k]=(seen[k]||0)+1;d=nm+' '+seen[k];}return{e,disp:d};
+  });
 }
 function actaList(){return state.equipos.filter(e=>!ACTA_EXCL.test(e.nombre||'')&&!esPilar(e));}
 function actaRows(){return dispNames(actaList());}
@@ -1647,7 +1661,14 @@ async function cargarProyectoDesdeURL(){
 (async function init(){
   renderSesion();
   const desdeURL=await cargarProyectoDesdeURL();
-  if(desdeURL)return;
+  if(desdeURL){
+    const accion=new URLSearchParams(location.search).get('accion');
+    if(accion==='acta'){
+      const tabCierre=document.querySelector('.tab[data-tab="cierre"]');
+      if(tabCierre){ tabCierre.click(); setTimeout(()=>{ try{ generarActa(); }catch(e){} }, 200); }
+    }
+    return;
+  }
   let saved=null;try{saved=await idbLoad();}catch(e){}
   if(saved&&((saved.equipos&&saved.equipos.length)||(saved.proyecto&&saved.proyecto.nombre))){applyLoaded(saved);}
   else{renderAll();}
