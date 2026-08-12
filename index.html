@@ -127,6 +127,9 @@
   .eq-info .nm{font-weight:700;font-size:14px;line-height:1.2}
   .eq-info .nm-edit{font-weight:700;font-size:14px;line-height:1.2;border:none;border-bottom:1px dashed transparent;background:transparent;color:inherit;font-family:inherit;padding:0;width:100%;outline:none}
   .eq-info .nm-edit:hover,.eq-info .nm-edit:focus{border-bottom-color:var(--or)}
+  .eq-info .ip-edit{font-weight:700;font-size:12px;border:1px dashed var(--line);border-radius:6px;background:#F8FAFC;color:#7C3AED;font-family:inherit;padding:3px 7px;width:118px;outline:none;flex-shrink:0}
+  .eq-info .ip-edit:hover,.eq-info .ip-edit:focus{border-color:#7C3AED;background:#fff}
+  .eq-info .ip-edit::placeholder{color:var(--muted);font-weight:600}
   .eq-info .pct{font-size:11px;font-weight:800;color:var(--muted);margin-top:3px}
   .eq-info .pct b{color:var(--or-dark)}
   .eq-info.done .pct b{color:var(--green)}
@@ -842,13 +845,17 @@ function confirmarImport(){
 function flattenStrings(node,path='',out=[],depth=0){if(depth>8)return out;if(node&&typeof node==='object'){for(const k in node){const v=node[k];if(esStr(v))out.push({key:path?path+'.'+k:k,val:v});else flattenStrings(v,path?path+'.'+k:k,out,depth+1);}}return out;}
 
 /* EQUIPOS */
+function esSpeedgateDoble_(nombre){ return /speedgate\s*doble/i.test(nombre||''); }
 function expandEquipo(r){
   const base=r.name,qty=r.qty,sector=r.sector||'General';
   const entradaN=(r&&r.entradaN!=null)?r.entradaN:null;
+  const vecesPorUnidad=esSpeedgateDoble_(base)?2:1; // Speedgate Doble siempre trae 2 IPs, se crean 2 unidades por cada uno
   for(let i=1;i<=qty;i++){
-    const u=newUnit(base,qty>1?base+' '+i:base,sector);
-    if(entradaN!=null)u.flujo=(i<=entradaN?'Entrada':'Salida');
-    state.equipos.push(u);
+    for(let k=0;k<vecesPorUnidad;k++){
+      const u=newUnit(base,qty>1?base+' '+i:base,sector);
+      if(entradaN!=null)u.flujo=(i<=entradaN?'Entrada':'Salida');
+      state.equipos.push(u);
+    }
   }
 }
 function newUnit(base,nombre,sector){return{id:uid(),base:base,nombre:nombre,sector:sector||'General',etapas:INSTALL_STAGES.map(()=>false),qa:{}};}
@@ -867,6 +874,23 @@ function renombrarEquipo(id,valor){
   if(!nuevo){renderEquipos();return;} // no se permite dejarlo vacío
   e.nombre=nuevo;
   e.nombreManual=true; // ya no se le vuelve a aplicar el armado automático (base + Entrada/Salida + N°)
+  renderEquipos();renderFotos();dirty();
+}
+function editarIP(id,valor){
+  const e=state.equipos.find(x=>x.id===id);
+  if(!e)return;
+  e.ip=(valor||'').trim();
+  renderEquipos();dirty();
+}
+function duplicarEquipo(id){
+  const e=state.equipos.find(x=>x.id===id);
+  if(!e)return;
+  const idx=state.equipos.indexOf(e);
+  const copia=JSON.parse(JSON.stringify(e));
+  copia.id=uid();
+  copia.ip=''; // para asignarle su propia IP por separado
+  copia.devolucion=false;
+  state.equipos.splice(idx+1,0,copia);
   renderEquipos();renderFotos();dirty();
 }
 function bySector(){const m=new Map();state.equipos.forEach(e=>{const s=e.sector||'General';if(!m.has(s))m.set(s,[]);m.get(s).push(e);});return m;}
@@ -899,11 +923,15 @@ function renderEquipos(){
       chips+=`<span class="stage ${e.etapas[4]?'on':''}" onclick="toggleQA('${e.id}')" title="Ver pruebas QA">${e.etapas[4]?'✓ ':''}Probado <small style="opacity:.85">(${qp.done}/${qp.total})</small> ▾</span>`;
       const card=document.createElement('div');card.className='eq-card '+cls;
       card.innerHTML=`<div class="eq-info ${cls}">
-          <input class="nm-edit ${e.devolucion?'tachado':''}" type="text" value="${esc((_EQNM[e.id]||e.nombre)+(e.ip?(' '+e.ip):''))}" title="Toca para editar el nombre del equipo (incluye la IP si está vinculada)" onclick="event.stopPropagation()" onchange="renombrarEquipo('${e.id}',this.value)">
+          <div style="display:flex;align-items:center;gap:6px">
+            <input class="nm-edit ${e.devolucion?'tachado':''}" type="text" value="${esc(_EQNM[e.id]||e.nombre)}" title="Toca para editar el nombre del equipo" onclick="event.stopPropagation()" onchange="renombrarEquipo('${e.id}',this.value)" style="flex:1">
+            <input class="ip-edit" type="text" value="${esc(e.ip||'')}" placeholder="IP" title="IP del equipo (se vincula con Redes Safecard, o edítala a mano)" onclick="event.stopPropagation()" onchange="editarIP('${e.id}',this.value)">
+          </div>
           <div class="pct"><b>${d}/${n}</b> · ${pct}%${d===n?' ✓':''}</div>
           <div class="eq-mini"><span style="width:${pct}%"></span></div>
         </div>
         <div class="eq-stages">${chips}</div>
+        <button class="iconbtn" onclick="duplicarEquipo('${e.id}')" title="Duplicar este equipo (útil si tiene más de una IP, ej. Speedgate Doble)">⧉</button>
         <button class="iconbtn" onclick="delUnit('${e.id}')" title="Eliminar">🗑</button>
         <div class="eq-extra">
           <button class="terreno-btn ${e.enTerreno?'on':''}" onclick="toggleTerreno('${e.id}')" title="Marca cuando el equipo salió de bodega y está en terreno">${e.enTerreno?('📍 En terreno · '+(e.fechaTerreno?fmtFecha(e.fechaTerreno):'')):'📦 Marcar en terreno'}</button>
