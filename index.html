@@ -388,6 +388,7 @@
     </div>
     <div style="margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <button class="btn" style="border-color:#7C3AED;color:#7C3AED" onclick="vincularConRedes()">🔗 Vincular con archivo de Redes (nombre + IP)</button>
+      <input type="text" id="redesLinkManual" placeholder="O pega aquí el link de la pestaña en Redes Safecard (si el nombre no coincide)" style="flex:1;min-width:260px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px">
       <span class="small" id="vincularRedesStatus" style="font-weight:600"></span>
     </div>
     <div id="equiposList"></div>
@@ -1305,24 +1306,42 @@ function scoreMatch_(nombreEquipo, sectorEquipo, fila){
   return Math.min(score,99);
 }
 let _redesFilasCache=[];
+function parseLinkRedes_(url){
+  const mId=url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  const mGid=url.match(/[#&?]gid=(\d+)/);
+  if(!mId) return null;
+  return {sid:mId[1], gid:mGid?mGid[1]:null};
+}
 async function vincularConRedes(){
   if(!requiereEditar())return;
-  if(!state.proyecto.nombre){alert('Este proyecto no tiene nombre definido.');return;}
   const status=document.getElementById('vincularRedesStatus');
+  const linkManual=(document.getElementById('redesLinkManual').value||'').trim();
   status.style.color='var(--muted)';status.textContent='Autorizando acceso a Sheets…';
   ensureSheetsToken(async(tok)=>{
     try{
-      status.textContent='Buscando la pestaña del proyecto en los archivos de Redes…';
       let filas=null, encontrado=null;
-      for(const sid of window.REDES_SHEET_IDS){
-        const tabs=await sheetsListTabsRed_(sid, tok);
-        const match=mejorCoincidenciaTabRed_(state.proyecto.nombre, tabs);
-        if(match){ encontrado={sid,tab:match.title}; break; }
+      if(linkManual){
+        const parsed=parseLinkRedes_(linkManual);
+        if(!parsed){status.textContent='⚠ No reconocí ese link. Debe ser una URL de Google Sheets.';status.style.color='var(--nc)';return;}
+        status.textContent='Abriendo la pestaña del link pegado…';
+        const tabs=await sheetsListTabsRed_(parsed.sid, tok);
+        let tab=parsed.gid ? tabs.find(t=>String(t.sheetId)===String(parsed.gid)) : null;
+        if(!tab) tab=tabs[0]; // si no venía gid en el link, usa la primera pestaña
+        if(!tab){status.textContent='⚠ No se encontró ninguna pestaña en ese archivo.';status.style.color='var(--nc)';return;}
+        encontrado={sid:parsed.sid, tab:tab.title};
+      }else{
+        if(!state.proyecto.nombre){alert('Este proyecto no tiene nombre definido.');return;}
+        status.textContent='Buscando la pestaña del proyecto en los archivos de Redes…';
+        for(const sid of window.REDES_SHEET_IDS){
+          const tabs=await sheetsListTabsRed_(sid, tok);
+          const match=mejorCoincidenciaTabRed_(state.proyecto.nombre, tabs);
+          if(match){ encontrado={sid,tab:match.title}; break; }
+        }
+        if(!encontrado){status.textContent='⚠ No se encontró una pestaña que coincida con "'+state.proyecto.nombre+'". Pega el link directo de la pestaña en el campo de al lado.';status.style.color='var(--nc)';return;}
       }
-      if(!encontrado){status.textContent='⚠ No se encontró una pestaña de red que coincida con "'+state.proyecto.nombre+'".';status.style.color='var(--nc)';return;}
       status.textContent='Leyendo equipos de "'+encontrado.tab+'"…';
       filas=await fetchRedesRows_(encontrado.sid, encontrado.tab, tok);
-      if(!filas.length){status.textContent='⚠ La pestaña se encontró pero no se pudieron leer filas de equipos.';status.style.color='var(--nc)';return;}
+      if(!filas.length){status.textContent='⚠ La pestaña "'+encontrado.tab+'" se encontró pero no se pudieron leer filas de equipos.';status.style.color='var(--nc)';return;}
       _redesFilasCache=filas;
       status.textContent='✅ '+filas.length+' fila(s) leídas de "'+encontrado.tab+'". Revisa el emparejamiento abajo.';status.style.color='var(--green)';
       abrirModalMatchRedes_(filas);
