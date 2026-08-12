@@ -110,6 +110,8 @@
   .eq-extra{flex-basis:100%;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px;border-top:1px dashed var(--line);padding-top:9px}
   .terreno-btn{border:1px dashed var(--muted);background:#fff;color:var(--muted);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
   .terreno-btn.on{background:#DCFCE7;border:1px solid var(--green);border-style:solid;color:#166534}
+  .terreno-btn.on-dev{background:#FEE2E2;border:1px solid var(--nc);border-style:solid;color:var(--nc)}
+  .nm-edit.tachado{text-decoration:line-through;color:var(--nc);opacity:.75}
   .eq-coment{flex:1;min-width:180px;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:13px;font-family:inherit}
   .acta-tg{border-radius:7px;padding:5px 12px;font-weight:800;font-size:12px;border:1.5px solid;cursor:pointer;min-width:44px}
   .acta-tg.si{background:#DCFCE7;color:#166534;border-color:var(--green)}
@@ -121,7 +123,7 @@
   .acta-flujo{margin-top:5px;border:1px solid var(--line);border-radius:6px;padding:3px 6px;font-size:12px;color:var(--muted);max-width:170px}
   .eq-card.done{border-left-color:var(--green);background:linear-gradient(90deg,var(--green-soft),#fff 60%)}
   .eq-card.partial{border-left-color:var(--or)}
-  .eq-info{min-width:150px;flex-shrink:0}
+  .eq-info{flex:1 1 100%;min-width:100%}
   .eq-info .nm{font-weight:700;font-size:14px;line-height:1.2}
   .eq-info .nm-edit{font-weight:700;font-size:14px;line-height:1.2;border:none;border-bottom:1px dashed transparent;background:transparent;color:inherit;font-family:inherit;padding:0;width:100%;outline:none}
   .eq-info .nm-edit:hover,.eq-info .nm-edit:focus{border-bottom-color:var(--or)}
@@ -384,6 +386,10 @@
         <button class="addbtn" onclick="addEquipoManual()">+ Agregar</button>
       </div>
     </div>
+    <div style="margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <button class="btn" style="border-color:#7C3AED;color:#7C3AED" onclick="vincularConRedes()">🔗 Vincular con archivo de Redes (nombre + IP)</button>
+      <span class="small" id="vincularRedesStatus" style="font-weight:600"></span>
+    </div>
     <div id="equiposList"></div>
     <div class="empty" id="equiposEmpty">No hay equipos. Carga el Detalle de Proyecto o agrégalos arriba.</div>
   </div>
@@ -419,6 +425,18 @@
       <button class="btn" style="border-color:var(--or);color:var(--or-dark);background:var(--or-soft)" onclick="syncNow(false)">☁️ Sincronizar al Panel</button>
       <span class="small" id="bSyncStatus" style="font-weight:600">—</span>
     </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title-bar"><h2>📅 Días efectivos de instalación</h2></div>
+    <p class="small" style="margin-bottom:10px">Marca los días en que se sacó a los técnicos del proyecto (emergencias, otros trabajos, etc.) para llevar la trazabilidad real de cuántos días se trabajó de verdad, aparte de los días de calendario transcurridos.</p>
+    <div class="row-flex">
+      <div style="width:180px"><label>Fecha</label><input type="date" id="diaNoEfFecha"></div>
+      <div class="grow"><label>Motivo (opcional)</label><input id="diaNoEfMotivo" placeholder="Ej: emergencia en otro proyecto"></div>
+      <button class="btn" style="border-color:var(--nc);color:var(--nc)" onclick="marcarDiaNoEfectivo()">🚫 Marcar día no efectivo</button>
+    </div>
+    <div id="diasEfectivosResumen" style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap"></div>
+    <div id="diasNoEfectivosList" style="margin-top:10px"></div>
   </div>
 
   <div class="card">
@@ -498,6 +516,13 @@
       <thead><tr><th>Insumo</th><th class="center" style="width:90px">Unidad</th><th class="center" style="width:110px">Cantidad</th><th style="width:44px"></th></tr></thead>
       <tbody id="insBody"></tbody>
     </table></div>
+  </div>
+  <div class="card">
+    <div class="card-title-bar"><h2>↩️ Devolución de equipos</h2></div>
+    <p class="small" style="margin-bottom:10px">Los equipos marcados con "↩️ Devolución" en la pestaña Avance aparecen aquí. Al presionar el botón se envía un correo con el listado (nombre + IP si está disponible) para gestionar la devolución a bodega.</p>
+    <div id="devolucionLista" style="margin-bottom:10px"></div>
+    <button class="btn" style="border-color:var(--nc);color:var(--nc)" onclick="realizarDevolucion()" id="btnDevolucion">📤 Realizar devolución</button>
+    <p class="small" id="devolucionStatus" style="margin-top:8px;font-weight:600"></p>
   </div>
   <div class="card">
     <div class="card-title-bar"><h2>🏁 Cierre del proyecto</h2><span class="pill or" id="pillCierre">—</span></div>
@@ -851,6 +876,7 @@ function renderEquipos(){
   document.getElementById('equiposEmpty').style.display=state.equipos.length?'none':'block';
   c.innerHTML='';
   _EQNM={};dispNames(state.equipos).forEach(x=>_EQNM[x.e.id]=x.disp);
+  renderDevolucionLista();
   bySector().forEach((items,sector)=>{
     const total=items.length*INSTALL_STAGES.length;
     const done=items.reduce((a,e)=>a+e.etapas.filter(Boolean).length,0);
@@ -872,7 +898,7 @@ function renderEquipos(){
       chips+=`<span class="stage ${e.etapas[4]?'on':''}" onclick="toggleQA('${e.id}')" title="Ver pruebas QA">${e.etapas[4]?'✓ ':''}Probado <small style="opacity:.85">(${qp.done}/${qp.total})</small> ▾</span>`;
       const card=document.createElement('div');card.className='eq-card '+cls;
       card.innerHTML=`<div class="eq-info ${cls}">
-          <input class="nm-edit" type="text" value="${esc(_EQNM[e.id]||e.nombre)}" title="Toca para editar el nombre del equipo" onclick="event.stopPropagation()" onchange="renombrarEquipo('${e.id}',this.value)">
+          <input class="nm-edit ${e.devolucion?'tachado':''}" type="text" value="${esc((_EQNM[e.id]||e.nombre)+(e.ip?(' '+e.ip):''))}" title="Toca para editar el nombre del equipo (incluye la IP si está vinculada)" onclick="event.stopPropagation()" onchange="renombrarEquipo('${e.id}',this.value)">
           <div class="pct"><b>${d}/${n}</b> · ${pct}%${d===n?' ✓':''}</div>
           <div class="eq-mini"><span style="width:${pct}%"></span></div>
         </div>
@@ -880,6 +906,7 @@ function renderEquipos(){
         <button class="iconbtn" onclick="delUnit('${e.id}')" title="Eliminar">🗑</button>
         <div class="eq-extra">
           <button class="terreno-btn ${e.enTerreno?'on':''}" onclick="toggleTerreno('${e.id}')" title="Marca cuando el equipo salió de bodega y está en terreno">${e.enTerreno?('📍 En terreno · '+(e.fechaTerreno?fmtFecha(e.fechaTerreno):'')):'📦 Marcar en terreno'}</button>
+          <button class="terreno-btn ${e.devolucion?'on-dev':''}" onclick="toggleDevolucion('${e.id}')" title="Marca este equipo para devolución a bodega">${e.devolucion?'↩️ En devolución':'↩️ Devolución'}</button>
           <input class="eq-coment" placeholder="Comentario / detalle del equipo…" value="${esc(e.comentario||'')}" onchange="setComentario('${e.id}',this.value)">
         </div>`;
       c.appendChild(card);
@@ -909,6 +936,41 @@ function setUnit(id,f,v){const e=state.equipos.find(x=>x.id===id);if(!e)return;e
 function toggleStage(id,i){const e=state.equipos.find(x=>x.id===id);e.etapas[i]=!e.etapas[i];renderEquipos();recalc();dirty();}
 function markPrev(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;const all=e.etapas.slice(0,4).every(Boolean);for(let i=0;i<4;i++)e.etapas[i]=!all;renderEquipos();recalc();dirty();}
 function toggleTerreno(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.enTerreno=!e.enTerreno;if(e.enTerreno&&!e.fechaTerreno)e.fechaTerreno=hoyISO();renderEquipos();dirty();}
+function toggleDevolucion(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.devolucion=!e.devolucion;renderEquipos();renderDevolucionLista();dirty();}
+function renderDevolucionLista(){
+  const cont=document.getElementById('devolucionLista'),btn=document.getElementById('btnDevolucion');
+  if(!cont)return;
+  const marcados=state.equipos.filter(e=>e.devolucion);
+  if(btn)btn.disabled=!marcados.length;
+  if(!marcados.length){cont.innerHTML='<p class="small" style="color:var(--muted)">No hay equipos marcados para devolución.</p>';return;}
+  const disp={};dispNames(state.equipos).forEach(x=>disp[x.e.id]=x.disp);
+  cont.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:13px">'
+    + '<tr><th style="text-align:left;border-bottom:1px solid var(--line);padding:4px">Equipo</th><th style="text-align:left;border-bottom:1px solid var(--line);padding:4px">IP</th><th style="text-align:left;border-bottom:1px solid var(--line);padding:4px">Sector</th></tr>'
+    + marcados.map(e=>`<tr><td style="padding:4px">${esc(disp[e.id]||e.nombre)}</td><td style="padding:4px">${esc(e.ip||'—')}</td><td style="padding:4px">${esc(e.sector||'—')}</td></tr>`).join('')
+    + '</table>';
+}
+async function realizarDevolucion(){
+  if(!requiereEditar())return;
+  const marcados=state.equipos.filter(e=>e.devolucion);
+  if(!marcados.length){alert('No hay equipos marcados para devolución.');return;}
+  if(!window.DEVOLUCION_ENDPOINT||/PEGA_AQUI/.test(window.DEVOLUCION_ENDPOINT)){alert('Falta configurar el endpoint de devolución (window.DEVOLUCION_ENDPOINT) en este archivo.');return;}
+  if(!confirm('¿Enviar correo de devolución con '+marcados.length+' equipo(s)?'))return;
+  const disp={};dispNames(state.equipos).forEach(x=>disp[x.e.id]=x.disp);
+  const payload={proyecto:state.proyecto.nombre||'',responsable:state.proyecto.jefe||'',equipos:marcados.map(e=>({nombre:disp[e.id]||e.nombre,ip:e.ip||'',sector:e.sector||''}))};
+  const status=document.getElementById('devolucionStatus');
+  status.textContent='Enviando…';status.style.color='var(--muted)';
+  try{
+    const res=await fetch(window.DEVOLUCION_ENDPOINT,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
+    const data=await res.json();
+    if(data&&data.ok){
+      status.textContent='✅ Correo de devolución enviado ('+data.enviados+' equipo(s)).';status.style.color='var(--green)';
+    }else{
+      status.textContent='⚠ '+((data&&data.error)||'No se pudo enviar.');status.style.color='var(--nc)';
+    }
+  }catch(e){
+    status.textContent='⚠ No se pudo contactar el servidor: '+(e.message||e);status.style.color='var(--nc)';
+  }
+}
 function setComentario(id,val){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.comentario=val;dirty();}
 
 /* CALIDAD */
@@ -1166,6 +1228,164 @@ function estadoDeNube(data){
 /* ===== GOOGLE DRIVE (Picker) ===== */
 let _gpickerReady=false,_gtokenClient=null,_gtoken=null;
 function driveConfigOk(){return window.GOOGLE_CLIENT_ID&&window.GOOGLE_API_KEY&&!/PEGA_AQUI/.test(window.GOOGLE_CLIENT_ID)&&!/PEGA_AQUI/.test(window.GOOGLE_API_KEY);}
+
+/* ===== Vinculación con archivo de Redes Safecard (nombre + IP) =====
+ * Busca, entre los 3 archivos "Redes Safecard", la pestaña cuyo nombre
+ * coincide con el proyecto actual, lee sus filas y trata de emparejar
+ * cada equipo de Seguimiento con su IP real por nombre + sector.
+ * El emparejamiento es best-effort: lo que no calza queda para asignar
+ * a mano en el modal de revisión. */
+window.REDES_SHEET_IDS = [
+  "15oSekVAR1B1UXn126vd2PXgU4Sr8xBXIXADjq0EOGgc", // Redes Safecard 1
+  "1E1miFfrLoQdkEmrySMbKoanO7k77iZi-pRY5iYXVhUY", // Redes Safecard 2
+  "19n5nV7cPumUWWA_Q_aixGvIOe3EgSalmmbr84-y1Epw"  // Redes Safecard 3
+];
+let _sheetsToken=null,_sheetsTokenClient=null;
+function ensureSheetsToken(cb, errcb){
+  if(!window.GOOGLE_CLIENT_ID||/PEGA_AQUI/.test(window.GOOGLE_CLIENT_ID)){errcb&&errcb('Falta configurar GOOGLE_CLIENT_ID en este archivo.');return;}
+  if(!window.google||!google.accounts||!google.accounts.oauth2){errcb&&errcb('Google aún no carga. Reintenta en unos segundos.');return;}
+  if(!_sheetsTokenClient){
+    _sheetsTokenClient=google.accounts.oauth2.initTokenClient({
+      client_id:window.GOOGLE_CLIENT_ID,
+      scope:'https://www.googleapis.com/auth/spreadsheets.readonly',
+      callback:(resp)=>{ if(resp&&resp.access_token){_sheetsToken=resp.access_token;cb(_sheetsToken);} else errcb&&errcb('No se pudo autorizar el acceso a Sheets.'); }
+    });
+  }
+  if(_sheetsToken) cb(_sheetsToken); else _sheetsTokenClient.requestAccessToken({prompt:''});
+}
+function normalizaTextoRed_(s){return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();}
+async function sheetsListTabsRed_(spreadsheetId, tok){
+  const url='https://sheets.googleapis.com/v4/spreadsheets/'+spreadsheetId+'?fields=sheets.properties(sheetId,title)';
+  const res=await fetch(url,{headers:{Authorization:'Bearer '+tok}});
+  if(!res.ok) throw new Error('Sheets API respondió '+res.status);
+  const data=await res.json();
+  return (data.sheets||[]).map(s=>s.properties);
+}
+function mejorCoincidenciaTabRed_(nombreProyecto, tabs){
+  const n=normalizaTextoRed_(nombreProyecto);let best=null;
+  for(const t of tabs){
+    const tn=normalizaTextoRed_(t.title);
+    if(tn===n) return t;
+    if((tn.includes(n)||n.includes(tn)) && (!best||tn.length<normalizaTextoRed_(best.title).length)) best=t;
+  }
+  return best;
+}
+async function fetchRedesRows_(spreadsheetId, tabTitle, tok){
+  const range=encodeURIComponent("'"+tabTitle+"'");
+  const url='https://sheets.googleapis.com/v4/spreadsheets/'+spreadsheetId+'/values/'+range+'?valueRenderOption=FORMATTED_VALUE';
+  const res=await fetch(url,{headers:{Authorization:'Bearer '+tok}});
+  if(!res.ok) throw new Error('Sheets API respondió '+res.status+' leyendo la pestaña.');
+  const data=await res.json();
+  const values=data.values||[];
+  const IP_RE=/^\d{1,3}(\.\d{1,3}){3}$/;
+  const filas=[];
+  values.forEach(row=>{
+    for(let i=0;i<row.length;i++){
+      if(IP_RE.test((row[i]||'').trim())){
+        const ip=row[i].trim();
+        const descripcion=(row[i+1]||'').trim();
+        const sector=(row[i+2]||'').trim();
+        if(descripcion) filas.push({ip,descripcion,sector});
+        break;
+      }
+    }
+  });
+  return filas;
+}
+function scoreMatch_(nombreEquipo, sectorEquipo, fila){
+  const a=normalizaTextoRed_(nombreEquipo), b=normalizaTextoRed_(fila.descripcion);
+  if(!a||!b) return 0;
+  if(a===b) return 100;
+  const wa=a.split(' ').filter(w=>w.length>2), wb=b.split(' ').filter(w=>w.length>2);
+  if(!wa.length) return 0;
+  let comunes=0; wa.forEach(w=>{ if(wb.includes(w)) comunes++; });
+  let score=Math.round(comunes/wa.length*70);
+  if(sectorEquipo&&fila.sector&&normalizaTextoRed_(sectorEquipo)===normalizaTextoRed_(fila.sector)) score+=20;
+  if(a.includes(b)||b.includes(a)) score+=15;
+  return Math.min(score,99);
+}
+let _redesFilasCache=[];
+async function vincularConRedes(){
+  if(!requiereEditar())return;
+  if(!state.proyecto.nombre){alert('Este proyecto no tiene nombre definido.');return;}
+  const status=document.getElementById('vincularRedesStatus');
+  status.style.color='var(--muted)';status.textContent='Autorizando acceso a Sheets…';
+  ensureSheetsToken(async(tok)=>{
+    try{
+      status.textContent='Buscando la pestaña del proyecto en los archivos de Redes…';
+      let filas=null, encontrado=null;
+      for(const sid of window.REDES_SHEET_IDS){
+        const tabs=await sheetsListTabsRed_(sid, tok);
+        const match=mejorCoincidenciaTabRed_(state.proyecto.nombre, tabs);
+        if(match){ encontrado={sid,tab:match.title}; break; }
+      }
+      if(!encontrado){status.textContent='⚠ No se encontró una pestaña de red que coincida con "'+state.proyecto.nombre+'".';status.style.color='var(--nc)';return;}
+      status.textContent='Leyendo equipos de "'+encontrado.tab+'"…';
+      filas=await fetchRedesRows_(encontrado.sid, encontrado.tab, tok);
+      if(!filas.length){status.textContent='⚠ La pestaña se encontró pero no se pudieron leer filas de equipos.';status.style.color='var(--nc)';return;}
+      _redesFilasCache=filas;
+      status.textContent='✅ '+filas.length+' fila(s) leídas de "'+encontrado.tab+'". Revisa el emparejamiento abajo.';status.style.color='var(--green)';
+      abrirModalMatchRedes_(filas);
+    }catch(e){
+      status.textContent='⚠ Error: '+(e.message||e);status.style.color='var(--nc)';
+    }
+  }, (msg)=>{ status.textContent='⚠ '+msg; status.style.color='var(--nc)'; });
+}
+function abrirModalMatchRedes_(filas){
+  const disp={};dispNames(state.equipos).forEach(x=>disp[x.e.id]=x.disp);
+  const propuestas=state.equipos.map(e=>{
+    let mejor=null,mejorScore=0;
+    filas.forEach(f=>{ const s=scoreMatch_(e.nombre,e.sector,f); if(s>mejorScore){mejorScore=s;mejor=f;} });
+    return {id:e.id, nombre:disp[e.id]||e.nombre, sector:e.sector, ipActual:e.ip||'', propuesta:(mejorScore>=45?mejor:null), score:mejorScore};
+  });
+  const opciones=filas.map((f,i)=>`<option value="${i}">${esc(f.descripcion)} — ${esc(f.ip)}${f.sector?(' ('+esc(f.sector)+')'):''}</option>`).join('');
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML=`<div style="background:#fff;border-radius:12px;max-width:720px;width:100%;max-height:85vh;overflow:auto;padding:20px">
+    <h2 style="margin-bottom:4px">🔗 Revisar emparejamiento con Redes Safecard</h2>
+    <p class="small" style="margin-bottom:14px;color:var(--muted)">Se propone automáticamente la IP más probable para cada equipo. Revisa y corrige donde haga falta antes de aplicar — es un emparejamiento por nombre, puede fallar en casos ambiguos.</p>
+    <div id="matchRedesBody"></div>
+    <div style="margin-top:16px;display:flex;gap:10px">
+      <button class="btn primary" style="background:var(--or);color:#fff;border-color:var(--or)" onclick="aplicarMatchRedes_()">✓ Aplicar IPs seleccionadas</button>
+      <button class="btn" onclick="this.closest('div[style*=fixed]')?.remove();document.body.removeChild(document.getElementById('modalMatchRedes'))">Cancelar</button>
+    </div>
+  </div>`;
+  modal.id='modalMatchRedes';
+  document.body.appendChild(modal);
+  const body=document.getElementById('matchRedesBody');
+  body.innerHTML=propuestas.map(p=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)">
+      <span style="flex:1;font-weight:600">${esc(p.nombre)}</span>
+      <select data-eqid="${p.id}" style="flex:1;border:1px solid var(--line);border-radius:6px;padding:4px 6px">
+        <option value="">— sin cambio (${p.ipActual||'sin IP'}) —</option>
+        ${opciones}
+      </select>
+    </div>`).join('');
+  // Preseleccionar la propuesta automática de cada fila
+  propuestas.forEach(p=>{
+    if(!p.propuesta) return;
+    const sel=body.querySelector(`select[data-eqid="${p.id}"]`);
+    if(!sel) return;
+    const idx=filas.indexOf(p.propuesta);
+    if(idx>=0) sel.value=String(idx);
+  });
+}
+function aplicarMatchRedes_(){
+  const modal=document.getElementById('modalMatchRedes');
+  if(!modal)return;
+  let aplicadas=0;
+  modal.querySelectorAll('select[data-eqid]').forEach(sel=>{
+    if(sel.value===''){return;}
+    const idx=parseInt(sel.value,10);
+    const fila=_redesFilasCache[idx];
+    const e=state.equipos.find(x=>x.id===sel.getAttribute('data-eqid'));
+    if(e&&fila){e.ip=fila.ip;aplicadas++;}
+  });
+  modal.remove();
+  renderEquipos();dirty();
+  const status=document.getElementById('vincularRedesStatus');
+  if(status){status.textContent='✅ '+aplicadas+' equipo(s) actualizados con su IP.';status.style.color='var(--green)';}
+}
 function cargarDrive(){
   if(!driveConfigOk()){alert('Falta configurar Google Drive.\n\nHay que pegar el Client ID y la API Key de Google en el archivo (ver instrucciones al final del archivo / pídele a soporte).');return;}
   if(!window.google||!google.accounts||!google.accounts.oauth2){alert('Google aún no carga. Verifica tu conexión y reintenta en unos segundos.');return;}
@@ -1478,7 +1698,44 @@ function registrarAvance(){
   guardarNube(true); // guarda el avance completo en la nube automáticamente, para poder continuar mañana desde este mismo registro
 }
 function delBitacora(id){if(!confirm('¿Eliminar este registro?'))return;state.bitacora=(state.bitacora||[]).filter(x=>(x.id||x.fecha)!==id);renderBitacora();dirty();}
+
+function marcarDiaNoEfectivo(){
+  if(!requiereEditar())return;
+  const fecha=document.getElementById('diaNoEfFecha').value||hoyISO();
+  const motivo=document.getElementById('diaNoEfMotivo').value||'';
+  state.diasNoEfectivos=state.diasNoEfectivos||[];
+  if(state.diasNoEfectivos.some(d=>d.fecha===fecha)){alert('Ese día ya está marcado como no efectivo.');return;}
+  state.diasNoEfectivos.push({id:uid(),fecha,motivo});
+  document.getElementById('diaNoEfMotivo').value='';
+  renderDiasEfectivos();dirty();
+}
+function quitarDiaNoEfectivo(id){
+  state.diasNoEfectivos=(state.diasNoEfectivos||[]).filter(d=>d.id!==id);
+  renderDiasEfectivos();dirty();
+}
+function renderDiasEfectivos(){
+  const resumen=document.getElementById('diasEfectivosResumen'),list=document.getElementById('diasNoEfectivosList');
+  if(!resumen||!list)return;
+  const noEf=(state.diasNoEfectivos||[]).slice().sort((a,b)=>a.fecha<b.fecha?1:-1);
+  const ini=state.proyecto.inicio;
+  const hoy=hoyISO();
+  let transcurridos=0;
+  if(ini){transcurridos=Math.round((new Date(hoy)-new Date(ini))/86400000)+1;if(transcurridos<0)transcurridos=0;}
+  const noEfEnRango=ini?noEf.filter(d=>d.fecha>=ini&&d.fecha<=hoy).length:noEf.length;
+  const efectivos=Math.max(transcurridos-noEfEnRango,0);
+  const chip=(txt,val,color)=>`<div style="background:${color||'#F3F4F6'};border-radius:10px;padding:8px 14px;text-align:center;min-width:100px"><div style="font-size:20px;font-weight:800">${val}</div><div style="font-size:11px;color:var(--muted);font-weight:700">${txt}</div></div>`;
+  resumen.innerHTML = ini
+    ? chip('Días transcurridos',transcurridos) + chip('Días no efectivos',noEfEnRango,'#FEE2E2') + chip('Días efectivos reales',efectivos,'#DCFCE7')
+    : '<p class="small">Define la "Fecha inicio instalación" en la pestaña Proyecto para calcular los días efectivos.</p>';
+  list.innerHTML = noEf.length ? noEf.map(d=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)">
+      <span style="font-weight:700;min-width:95px">${fmtFecha(d.fecha)}</span>
+      <span class="small" style="flex:1;color:var(--muted)">${esc(d.motivo||'Sin motivo especificado')}</span>
+      <button class="btn-sm" onclick="quitarDiaNoEfectivo('${d.id}')" title="Quitar">✕</button>
+    </div>`).join('') : '<p class="small" style="color:var(--muted)">No hay días marcados como no efectivos.</p>';
+}
 function renderBitacora(){
+  renderDiasEfectivos();
   const por=document.getElementById('bPor');
   if(por){const cur=por.value,opts=[];if(state.proyecto.jefe)opts.push(state.proyecto.jefe);(state.proyecto.tecnicosAsg||[]).forEach(t=>{if(!opts.includes(t))opts.push(t);});
     por.innerHTML='<option value="">—</option>'+opts.map(o=>`<option>${esc(o)}</option>`).join('');por.value=cur||state.proyecto.jefe||'';}
@@ -1704,6 +1961,7 @@ window.FIREBASE_CONFIG = {
    5) Pantalla de consentimiento OAuth: agrega a tu equipo como usuarios de prueba
       (o publica la app) para que puedan autorizar. */
 window.GOOGLE_CLIENT_ID = "722203246514-2ljn6due7pt0ihiv8d00ffmu2bbp0if8.apps.googleusercontent.com";
+window.DEVOLUCION_ENDPOINT = "https://script.google.com/macros/s/AKfycby8YuBqOTDnMVEK6svBzViA8g8kTxfoe2DCctsAaTxlPEFMN6S71ipzpOloG9XNUrwBSg/exec";
 window.GOOGLE_API_KEY   = "AIzaSyCyag0lPAOWJTqj0x1Bj-iaOGO3bVXOxnQ";
 /* Correos que PUEDEN editar/actualizar el avance (jefes de cuadrilla + jefe de área). El resto: solo lectura. */
 window.EDITORES = ["nicolas.jara@safecard.cl","fabian.pavez@safecard.cl","francisco.morales@safecard.cl","ignacio.fuentes@safecard.cl"];
