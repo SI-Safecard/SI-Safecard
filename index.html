@@ -130,6 +130,7 @@
   .eq-info .ip-edit{font-weight:700;font-size:12px;border:1px dashed var(--line);border-radius:6px;background:#F8FAFC;color:#7C3AED;font-family:inherit;padding:3px 7px;width:118px;outline:none;flex-shrink:0}
   .eq-info .ip-edit:hover,.eq-info .ip-edit:focus{border-color:#7C3AED;background:#fff}
   .eq-info .ip-edit::placeholder{color:var(--muted);font-weight:600}
+  .eq-info .ip-edit.ip-dup{border:1px solid var(--nc);border-style:solid;background:#FEE2E2;color:var(--nc)}
   .eq-info .pct{font-size:11px;font-weight:800;color:var(--muted);margin-top:3px}
   .eq-info .pct b{color:var(--or-dark)}
   .eq-info.done .pct b{color:var(--green)}
@@ -391,6 +392,7 @@
     </div>
     <div style="margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <button class="btn" style="border-color:#7C3AED;color:#7C3AED" onclick="vincularConRedes()">🔗 Vincular con archivo de Redes (nombre + IP)</button>
+      <button class="btn" style="border-color:var(--nc);color:var(--nc)" onclick="validarIPs()">✅ Validar IPs</button>
       <input type="text" id="redesLinkManual" placeholder="O pega aquí el link de la pestaña en Redes Safecard (si el nombre no coincide)" style="flex:1;min-width:260px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px">
       <span class="small" id="vincularRedesStatus" style="font-weight:600"></span>
     </div>
@@ -925,7 +927,7 @@ function renderEquipos(){
       card.innerHTML=`<div class="eq-info ${cls}">
           <div style="display:flex;align-items:center;gap:6px">
             <input class="nm-edit ${e.devolucion?'tachado':''}" type="text" value="${esc(_EQNM[e.id]||e.nombre)}" title="Toca para editar el nombre del equipo" onclick="event.stopPropagation()" onchange="renombrarEquipo('${e.id}',this.value)" style="flex:1">
-            <input class="ip-edit" type="text" value="${esc(e.ip||'')}" placeholder="IP" title="IP del equipo (se vincula con Redes Safecard, o edítala a mano)" onclick="event.stopPropagation()" onchange="editarIP('${e.id}',this.value)">
+            <input class="ip-edit" data-ip="${esc(e.ip||'')}" type="text" value="${esc(e.ip||'')}" placeholder="IP" title="IP del equipo (se vincula con Redes Safecard, o edítala a mano)" onclick="event.stopPropagation()" onchange="editarIP('${e.id}',this.value)">
           </div>
           <div class="pct"><b>${d}/${n}</b> · ${pct}%${d===n?' ✓':''}</div>
           <div class="eq-mini"><span style="width:${pct}%"></span></div>
@@ -942,6 +944,30 @@ function renderEquipos(){
       if(qaUnitOpen.has(e.id)){const pan=document.createElement('div');pan.innerHTML=qaPanelHtml(e);c.appendChild(pan.firstChild);}
     });
   });
+  marcarIPsDuplicadas();
+}
+function marcarIPsDuplicadas(){
+  const conteo={};
+  state.equipos.forEach(e=>{ const ip=(e.ip||'').trim(); if(ip){ conteo[ip]=(conteo[ip]||0)+1; } });
+  document.querySelectorAll('.ip-edit').forEach(inp=>{
+    const ip=(inp.value||'').trim();
+    inp.classList.toggle('ip-dup', !!ip && conteo[ip]>1);
+    inp.title = (ip && conteo[ip]>1) ? '⚠ Esta IP está repetida en '+conteo[ip]+' equipos' : 'IP del equipo (se vincula con Redes Safecard, o edítala a mano)';
+  });
+}
+function validarIPs(){
+  const conteo={},disp={};dispNames(state.equipos).forEach(x=>disp[x.e.id]=x.disp);
+  state.equipos.forEach(e=>{ const ip=(e.ip||'').trim(); if(ip){ (conteo[ip]=conteo[ip]||[]).push(disp[e.id]||e.nombre); } });
+  const dups=Object.entries(conteo).filter(([ip,lista])=>lista.length>1);
+  const status=document.getElementById('vincularRedesStatus');
+  if(!dups.length){
+    alert('✅ No hay IPs duplicadas. Todo está en orden.');
+    if(status){status.textContent='✅ Sin IPs duplicadas.';status.style.color='var(--green)';}
+  }else{
+    const detalle=dups.map(([ip,lista])=>'• '+ip+' → '+lista.join(', ')).join('\n');
+    alert('⚠ Encontré '+dups.length+' IP(s) repetida(s):\n\n'+detalle);
+    if(status){status.textContent='⚠ '+dups.length+' IP(s) repetida(s) — revisa los campos marcados en rojo.';status.style.color='var(--nc)';}
+  }
 }
 function qaPanelHtml(e){
   const tests=qaTests(e),p=qaProgress(e);
