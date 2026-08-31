@@ -1534,7 +1534,12 @@ function ensureDriveUploadToken(cb, errcb){
   if(!_gtokenUploadClient){
     _gtokenUploadClient=google.accounts.oauth2.initTokenClient({
       client_id:window.GOOGLE_CLIENT_ID,
-      scope:'https://www.googleapis.com/auth/drive.file',
+      // Se usa el scope completo "drive" (no "drive.file") porque se necesita poder
+      // BUSCAR carpetas ya existentes (la del proyecto, donde vive DP-Safecard) — con
+      // "drive.file" solo se pueden ver archivos que la propia app haya creado, así
+      // que nunca encontraba la carpeta del proyecto aunque el técnico ya tuviera
+      // acceso de editor ahí.
+      scope:'https://www.googleapis.com/auth/drive',
       callback:r=>{ if(r&&r.access_token){_gtokenUpload=r.access_token;cb(_gtokenUpload);} else errcb&&errcb('No se pudo autorizar Google Drive.'); }
     });
   }
