@@ -1080,8 +1080,8 @@ function renderFotos(){
     items.forEach(e=>{
       const foto=state.fotos.find(f=>f.equipoId===e.id);
       const slot=document.createElement('div');slot.className='ev-slot'+(foto?' has':'');
-      const fotoImg=foto&&(foto.data||foto.thumb||foto.driveUrl);
-      slot.innerHTML=`<div class="ev-thumb" onclick="pedirEvidencia('${e.id}')">${fotoImg?`<img src="${foto.data||foto.thumb||foto.driveUrl}">`:(foto?`<div class="ph" style="color:var(--pc)"><span class="big">☁️</span><span>Pendiente de subir<br>(foto tomada en otro dispositivo)</span></div>`:`<div class="ph"><span class="big">📸</span><span>Subir foto</span></div>`)}${foto?`<button class="ev-del" onclick="event.stopPropagation();delFoto('${foto.id}')">✕</button>`:''}</div>
+      const fotoImg=foto&&(foto.data||foto.driveUrl||foto.thumb);
+      slot.innerHTML=`<div class="ev-thumb" onclick="pedirEvidencia('${e.id}')">${fotoImg?`<img src="${foto.data||foto.driveUrl||foto.thumb}">`:(foto?`<div class="ph" style="color:var(--pc)"><span class="big">☁️</span><span>Pendiente de subir<br>(foto tomada en otro dispositivo)</span></div>`:`<div class="ph"><span class="big">📸</span><span>Subir foto</span></div>`)}${foto?`<button class="ev-del" onclick="event.stopPropagation();delFoto('${foto.id}')">✕</button>`:''}</div>
         <div class="ev-meta"><span class="nm">${esc(_EQNM[e.id]||e.nombre)}</span><span class="ev-tag ${foto?'ok':'no'}">${foto?'OK':'falta'}</span></div>`;
       g.appendChild(slot);
     });
@@ -1089,7 +1089,7 @@ function renderFotos(){
   });
   const mz=document.getElementById('multiZones');mz.innerHTML='';
   MULTI_CATS.forEach(cat=>{const fotos=state.fotos.filter(f=>f.cat===cat.id);const div=document.createElement('div');div.className='multi-zone';
-    div.innerHTML=`<h3>${cat.label} <span class="small" style="font-weight:600">· ${fotos.length} foto(s)</span></h3><div class="mz-grid">${fotos.map(f=>`<div class="mz-photo"><img src="${f.data||f.thumb||f.driveUrl||''}"><button class="del" onclick="delFoto('${f.id}')">✕</button></div>`).join('')}<div class="mz-add" onclick="pedirMulti('${cat.id}')"><span style="font-size:22px">＋</span>Agregar</div></div>`;
+    div.innerHTML=`<h3>${cat.label} <span class="small" style="font-weight:600">· ${fotos.length} foto(s)</span></h3><div class="mz-grid">${fotos.map(f=>`<div class="mz-photo"><img src="${f.data||f.driveUrl||f.thumb||''}"><button class="del" onclick="delFoto('${f.id}')">✕</button></div>`).join('')}<div class="mz-add" onclick="pedirMulti('${cat.id}')"><span style="font-size:22px">＋</span>Agregar</div></div>`;
     mz.appendChild(div);});
 }
 function pedirEvidencia(id){_evTarget=id;document.getElementById('fileEvidencia').click();}
@@ -1248,8 +1248,15 @@ async function guardarNube(silent){
   // liviana en la nube (Firestore) para que la app se mantenga rápida. Una foto ya
   // subida antes no se vuelve a subir.
   const pendientes=(state.fotos||[]).filter(f=>f.data && !f.driveUrl);
-  let fotosSubidas=0, fotosFallidas=0;
-  if(pendientes.length && driveConfigOk()){
+  let fotosSubidas=0, fotosFallidas=0, _ultimoErrorFotoDrive='';
+  // En un guardado SILENCIOSO (automático tras registrar un avance) y sin haber
+  // autorizado Drive todavía en esta sesión, el navegador casi siempre bloquea el
+  // popup de permiso por no ser un clic directo del técnico — en vez de fallar en
+  // silencio, se deja la foto pendiente (con su dato completo igual guardado en la
+  // nube como respaldo) y se reintenta solo en el próximo "☁️ Guardar en la nube"
+  // manual, que sí es un clic directo y puede abrir el popup sin problema.
+  const puedeIntentarDrive = !silent || !!_gtokenUpload;
+  if(pendientes.length && driveConfigOk() && puedeIntentarDrive){
     if(silent) setSyncStatus('☁️ Subiendo '+pendientes.length+' foto(s) nueva(s) a Drive…','var(--muted)');
     for(const f of pendientes){
       try{
@@ -1258,7 +1265,7 @@ async function guardarNube(silent){
         f.driveUrl=subida.url; f.driveFileId=subida.fileId;
         if(!f.thumb) f.thumb=await generarThumb_(f.data,220,0.35);
         fotosSubidas++;
-      }catch(e){ fotosFallidas++; console.warn('No se pudo subir la foto '+f.id+' a Drive:', e); }
+      }catch(e){ fotosFallidas++; if(!_ultimoErrorFotoDrive) _ultimoErrorFotoDrive=(e&&e.message)||String(e); console.warn('No se pudo subir la foto '+f.id+' a Drive:', e); }
     }
     dirty(); // las fotos ya tienen driveUrl/thumb; guarda ese cambio también localmente
   }
@@ -1291,7 +1298,7 @@ async function guardarNube(silent){
   try{
     await window.SafecardCloud.save(id,payload);
     const detFotos = fotosSubidas ? (' · '+fotosSubidas+' foto(s) subida(s) a Drive') : '';
-    const avisoFallo = fotosFallidas ? (' ⚠️ '+fotosFallidas+' foto(s) no se pudieron subir (revisa la conexión o el permiso de Drive).') : '';
+    const avisoFallo = fotosFallidas ? (' ⚠️ '+fotosFallidas+' foto(s) no se pudieron subir a Drive. Motivo: '+(_ultimoErrorFotoDrive||'desconocido')+'.') : '';
     if(!silent){alert('✅ Avance guardado en la nube.'+detFotos+avisoFallo+(sinFotos?'\n\n(Quedó algo pesado igual; revisa la conexión.)':'')+'\n\nAhora puedes cargarlo en otro dispositivo con “☁️ Cargar de la nube”.');}
     else{setSyncStatus('☁️ Bitácora guardada en la nube — mañana puedes seguir desde aquí'+detFotos+avisoFallo,sinFotos?'var(--pc)':'var(--green)');}
   }catch(e){
