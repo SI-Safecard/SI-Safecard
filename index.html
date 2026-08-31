@@ -1080,7 +1080,8 @@ function renderFotos(){
     items.forEach(e=>{
       const foto=state.fotos.find(f=>f.equipoId===e.id);
       const slot=document.createElement('div');slot.className='ev-slot'+(foto?' has':'');
-      slot.innerHTML=`<div class="ev-thumb" onclick="pedirEvidencia('${e.id}')">${foto?`<img src="${foto.data||foto.cloudUrl||''}">`:`<div class="ph"><span class="big">📸</span><span>Subir foto</span></div>`}${foto?`<button class="ev-del" onclick="event.stopPropagation();delFoto('${foto.id}')">✕</button>`:''}</div>
+      const fotoImg=foto&&(foto.data||foto.cloudUrl);
+      slot.innerHTML=`<div class="ev-thumb" onclick="pedirEvidencia('${e.id}')">${fotoImg?`<img src="${foto.data||foto.cloudUrl}">`:(foto?`<div class="ph" style="color:var(--pc)"><span class="big">☁️</span><span>Pendiente de subir<br>(foto tomada en otro dispositivo)</span></div>`:`<div class="ph"><span class="big">📸</span><span>Subir foto</span></div>`)}${foto?`<button class="ev-del" onclick="event.stopPropagation();delFoto('${foto.id}')">✕</button>`:''}</div>
         <div class="ev-meta"><span class="nm">${esc(_EQNM[e.id]||e.nombre)}</span><span class="ev-tag ${foto?'ok':'no'}">${foto?'OK':'falta'}</span></div>`;
       g.appendChild(slot);
     });
@@ -1267,9 +1268,15 @@ async function guardarNube(silent){
   let sinFotos=false;
   let stStr=JSON.stringify(st);
   if(stStr.length>900000){
-    // Respaldo: si aun así pesa demasiado (fotos sin subir por algún fallo de red),
-    // se sacan del documento para no perder el resto del avance.
-    st.fotos=(st.fotos||[]).map(f=>f.cloudUrl?{id:f.id,cat:f.cat,equipoId:f.equipoId,desc:f.desc,cloudUrl:f.cloudUrl}:null).filter(Boolean);
+    // Respaldo: si aun así pesa demasiado (fotos sin subir por algún fallo de red o
+    // permisos de Storage), NO se borran del documento — eso hacía que el equipo
+    // pareciera sin foto al reabrir. En vez de eso, se deja solo su referencia con
+    // un marcador "pendienteSubir", para que se sepa que sí hay una foto tomada,
+    // solo que falta sincronizarla (se reintenta sola la próxima vez que haya
+    // conexión y se guarde de nuevo, desde el mismo dispositivo donde se tomó).
+    st.fotos=(st.fotos||[]).map(f=> f.cloudUrl
+      ? {id:f.id,cat:f.cat,equipoId:f.equipoId,desc:f.desc,cloudUrl:f.cloudUrl}
+      : {id:f.id,cat:f.cat,equipoId:f.equipoId,desc:f.desc,pendienteSubir:true});
     stStr=JSON.stringify(st);
     if(stStr.length>900000){ st.fotos=[]; stStr=JSON.stringify(st); }
     sinFotos=true;
