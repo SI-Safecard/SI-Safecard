@@ -1080,8 +1080,8 @@ function renderFotos(){
     items.forEach(e=>{
       const foto=state.fotos.find(f=>f.equipoId===e.id);
       const slot=document.createElement('div');slot.className='ev-slot'+(foto?' has':'');
-      const fotoImg=foto&&(foto.data||foto.cloudUrl);
-      slot.innerHTML=`<div class="ev-thumb" onclick="pedirEvidencia('${e.id}')">${fotoImg?`<img src="${foto.data||foto.cloudUrl}">`:(foto?`<div class="ph" style="color:var(--pc)"><span class="big">☁️</span><span>Pendiente de subir<br>(foto tomada en otro dispositivo)</span></div>`:`<div class="ph"><span class="big">📸</span><span>Subir foto</span></div>`)}${foto?`<button class="ev-del" onclick="event.stopPropagation();delFoto('${foto.id}')">✕</button>`:''}</div>
+      const fotoImg=foto&&(foto.data||foto.thumb||foto.driveUrl);
+      slot.innerHTML=`<div class="ev-thumb" onclick="pedirEvidencia('${e.id}')">${fotoImg?`<img src="${foto.data||foto.thumb||foto.driveUrl}">`:(foto?`<div class="ph" style="color:var(--pc)"><span class="big">☁️</span><span>Pendiente de subir<br>(foto tomada en otro dispositivo)</span></div>`:`<div class="ph"><span class="big">📸</span><span>Subir foto</span></div>`)}${foto?`<button class="ev-del" onclick="event.stopPropagation();delFoto('${foto.id}')">✕</button>`:''}</div>
         <div class="ev-meta"><span class="nm">${esc(_EQNM[e.id]||e.nombre)}</span><span class="ev-tag ${foto?'ok':'no'}">${foto?'OK':'falta'}</span></div>`;
       g.appendChild(slot);
     });
@@ -1089,7 +1089,7 @@ function renderFotos(){
   });
   const mz=document.getElementById('multiZones');mz.innerHTML='';
   MULTI_CATS.forEach(cat=>{const fotos=state.fotos.filter(f=>f.cat===cat.id);const div=document.createElement('div');div.className='multi-zone';
-    div.innerHTML=`<h3>${cat.label} <span class="small" style="font-weight:600">· ${fotos.length} foto(s)</span></h3><div class="mz-grid">${fotos.map(f=>`<div class="mz-photo"><img src="${f.data||f.cloudUrl||''}"><button class="del" onclick="delFoto('${f.id}')">✕</button></div>`).join('')}<div class="mz-add" onclick="pedirMulti('${cat.id}')"><span style="font-size:22px">＋</span>Agregar</div></div>`;
+    div.innerHTML=`<h3>${cat.label} <span class="small" style="font-weight:600">· ${fotos.length} foto(s)</span></h3><div class="mz-grid">${fotos.map(f=>`<div class="mz-photo"><img src="${f.data||f.thumb||f.driveUrl||''}"><button class="del" onclick="delFoto('${f.id}')">✕</button></div>`).join('')}<div class="mz-add" onclick="pedirMulti('${cat.id}')"><span style="font-size:22px">＋</span>Agregar</div></div>`;
     mz.appendChild(div);});
 }
 function pedirEvidencia(id){_evTarget=id;document.getElementById('fileEvidencia').click();}
@@ -1243,39 +1243,45 @@ async function guardarNube(silent){
   pullProyecto();state.cierreObs=document.getElementById('cierreObs').value;
   const id=projId();
 
-  // Sube a Storage las fotos que todavía no tengan URL en la nube (subir una foto ya
-  // subida antes no la vuelve a subir). Así el documento de Firestore queda liviano
-  // siempre, sin importar cuántas fotos tenga el proyecto.
-  const pendientes=(state.fotos||[]).filter(f=>f.data && !f.cloudUrl);
+  // Sube a una carpeta especial en Drive (gratis) las fotos que todavía no tengan
+  // link ahí — la foto completa queda en Drive, y solo se guarda una miniatura muy
+  // liviana en la nube (Firestore) para que la app se mantenga rápida. Una foto ya
+  // subida antes no se vuelve a subir.
+  const pendientes=(state.fotos||[]).filter(f=>f.data && !f.driveUrl);
   let fotosSubidas=0, fotosFallidas=0;
-  if(pendientes.length && typeof window.SafecardCloud.subirFoto==='function'){
-    if(silent) setSyncStatus('☁️ Subiendo '+pendientes.length+' foto(s) nueva(s)…','var(--muted)');
+  if(pendientes.length && driveConfigOk()){
+    if(silent) setSyncStatus('☁️ Subiendo '+pendientes.length+' foto(s) nueva(s) a Drive…','var(--muted)');
     for(const f of pendientes){
       try{
-        f.cloudUrl=await window.SafecardCloud.subirFoto(id, f.id, f.data);
+        const nombreArchivo=(f.desc||f.id)+'.jpg';
+        const subida=await subirFotoADrive_(f.data,'image/jpeg',nombreArchivo);
+        f.driveUrl=subida.url; f.driveFileId=subida.fileId;
+        if(!f.thumb) f.thumb=await generarThumb_(f.data,220,0.35);
         fotosSubidas++;
-      }catch(e){ fotosFallidas++; console.warn('No se pudo subir la foto '+f.id+':', e); }
+      }catch(e){ fotosFallidas++; console.warn('No se pudo subir la foto '+f.id+' a Drive:', e); }
     }
-    dirty(); // las fotos ya tienen cloudUrl; guarda ese cambio también localmente
+    dirty(); // las fotos ya tienen driveUrl/thumb; guarda ese cambio también localmente
   }
 
   let st=JSON.parse(JSON.stringify(state));
-  // El documento de Firestore nunca necesita el base64 completo de las fotos que ya
-  // tienen URL en Storage — así el documento se mantiene liviano siempre.
+  // El documento de la nube nunca necesita el base64 completo de las fotos que ya
+  // están en Drive — se manda solo la miniatura liviana + el link a la foto real.
   if(Array.isArray(st.fotos)){
-    st.fotos=st.fotos.map(f=> f.cloudUrl ? Object.assign({},f,{data:undefined}) : f);
+    st.fotos=st.fotos.map(f=> f.driveUrl
+      ? {id:f.id,cat:f.cat,equipoId:f.equipoId,desc:f.desc,driveUrl:f.driveUrl,driveFileId:f.driveFileId,thumb:f.thumb}
+      : f);
   }
   let sinFotos=false;
   let stStr=JSON.stringify(st);
   if(stStr.length>900000){
-    // Respaldo: si aun así pesa demasiado (fotos sin subir por algún fallo de red o
-    // permisos de Storage), NO se borran del documento — eso hacía que el equipo
-    // pareciera sin foto al reabrir. En vez de eso, se deja solo su referencia con
-    // un marcador "pendienteSubir", para que se sepa que sí hay una foto tomada,
-    // solo que falta sincronizarla (se reintenta sola la próxima vez que haya
-    // conexión y se guarde de nuevo, desde el mismo dispositivo donde se tomó).
-    st.fotos=(st.fotos||[]).map(f=> f.cloudUrl
-      ? {id:f.id,cat:f.cat,equipoId:f.equipoId,desc:f.desc,cloudUrl:f.cloudUrl}
+    // Respaldo: si aun así pesa demasiado (fotos sin subir por algún fallo de red),
+    // NO se borran del documento — eso hacía que el equipo pareciera sin foto al
+    // reabrir. En vez de eso, se deja solo su referencia con un marcador
+    // "pendienteSubir", para que se sepa que sí hay una foto tomada, solo que falta
+    // sincronizarla (se reintenta sola la próxima vez que se guarde desde el mismo
+    // dispositivo donde se tomó).
+    st.fotos=(st.fotos||[]).map(f=> f.driveUrl
+      ? {id:f.id,cat:f.cat,equipoId:f.equipoId,desc:f.desc,driveUrl:f.driveUrl,driveFileId:f.driveFileId,thumb:f.thumb}
       : {id:f.id,cat:f.cat,equipoId:f.equipoId,desc:f.desc,pendienteSubir:true});
     stStr=JSON.stringify(st);
     if(stStr.length>900000){ st.fotos=[]; stStr=JSON.stringify(st); }
@@ -1284,8 +1290,8 @@ async function guardarNube(silent){
   let payload={nombre:state.proyecto.nombre||'',pid:state.proyecto.pid||'',updatedBy:state.proyecto.jefe||'',stateJson:stStr,sinFotos:sinFotos};
   try{
     await window.SafecardCloud.save(id,payload);
-    const detFotos = fotosSubidas ? (' · '+fotosSubidas+' foto(s) subida(s) a la nube') : '';
-    const avisoFallo = fotosFallidas ? (' ⚠️ '+fotosFallidas+' foto(s) no se pudieron subir (revisa la conexión).') : '';
+    const detFotos = fotosSubidas ? (' · '+fotosSubidas+' foto(s) subida(s) a Drive') : '';
+    const avisoFallo = fotosFallidas ? (' ⚠️ '+fotosFallidas+' foto(s) no se pudieron subir (revisa la conexión o el permiso de Drive).') : '';
     if(!silent){alert('✅ Avance guardado en la nube.'+detFotos+avisoFallo+(sinFotos?'\n\n(Quedó algo pesado igual; revisa la conexión.)':'')+'\n\nAhora puedes cargarlo en otro dispositivo con “☁️ Cargar de la nube”.');}
     else{setSyncStatus('☁️ Bitácora guardada en la nube — mañana puedes seguir desde aquí'+detFotos+avisoFallo,sinFotos?'var(--pc)':'var(--green)');}
   }catch(e){
@@ -1510,6 +1516,130 @@ function cargarDrive(){
   }
   if(_gtoken)abrirPicker(); else _gtokenClient.requestAccessToken({prompt:''});
 }
+/* ===== Fotos: subida a una carpeta especial en Drive (gratis, sin límite de tamaño de
+ * documento) — se guarda la foto completa en Drive y solo una miniatura muy liviana en
+ * la nube (Firestore), para que la app se mantenga rápida. ===== */
+let _gtokenUpload=null,_gtokenUploadClient=null;
+function ensureDriveUploadToken(cb, errcb){
+  if(!driveConfigOk()){errcb&&errcb('Falta configurar Google Drive en este archivo.');return;}
+  if(!window.google||!google.accounts||!google.accounts.oauth2){errcb&&errcb('Google aún no carga. Reintenta en unos segundos.');return;}
+  if(!_gtokenUploadClient){
+    _gtokenUploadClient=google.accounts.oauth2.initTokenClient({
+      client_id:window.GOOGLE_CLIENT_ID,
+      scope:'https://www.googleapis.com/auth/drive.file',
+      callback:r=>{ if(r&&r.access_token){_gtokenUpload=r.access_token;cb(_gtokenUpload);} else errcb&&errcb('No se pudo autorizar Google Drive.'); }
+    });
+  }
+  if(_gtokenUpload) cb(_gtokenUpload); else _gtokenUploadClient.requestAccessToken({prompt:''});
+}
+async function buscarOCrearCarpetaDrive_(tok, nombre, parentId){
+  const nombreEsc=nombre.replace(/'/g,"\\'");
+  const q=`name='${nombreEsc}' and mimeType='application/vnd.google-apps.folder' and trashed=false`+(parentId?` and '${parentId}' in parents`:` and 'root' in parents`);
+  const res=await fetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name)',{headers:{Authorization:'Bearer '+tok}});
+  if(!res.ok) throw new Error('No se pudo buscar la carpeta en Drive (HTTP '+res.status+')');
+  const data=await res.json();
+  if(data.files&&data.files.length) return data.files[0].id;
+  const metadata={name:nombre,mimeType:'application/vnd.google-apps.folder'};
+  if(parentId) metadata.parents=[parentId];
+  const res2=await fetch('https://www.googleapis.com/drive/v3/files?fields=id',{
+    method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify(metadata)
+  });
+  if(!res2.ok) throw new Error('No se pudo crear la carpeta en Drive (HTTP '+res2.status+')');
+  const data2=await res2.json();
+  return data2.id;
+}
+let _carpetaFotosCache={};
+// Busca la carpeta raíz del proyecto actual (la misma donde vive la subcarpeta
+// "DP Safecard" con el Detalle de Proyecto) para dejar las fotos justo ahí al lado,
+// en vez de en una carpeta aparte. Requiere que el técnico tenga acceso a esa
+// carpeta en Drive (compartida por quien administra DP-Safecard).
+async function buscarCarpetaProyectoDP_(tok){
+  const nombreProy=(state.proyecto.nombre||'').trim();
+  if(!nombreProy) return null;
+  const nombreEsc=nombreProy.replace(/'/g,"\\'");
+  const q=`mimeType='application/vnd.google-apps.folder' and trashed=false and name contains '${nombreEsc}'`;
+  const res=await fetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name)&pageSize=10',{headers:{Authorization:'Bearer '+tok}});
+  if(!res.ok) return null;
+  const data=await res.json();
+  if(!data.files||!data.files.length) return null;
+  // Entre las carpetas que coinciden por nombre, se prefiere la que además tenga
+  // adentro una subcarpeta "DP Safecard" — así se confirma que es la carpeta raíz
+  // real del proyecto, y no otra coincidencia de nombre suelta.
+  for(const f of data.files){
+    try{
+      const q2=`'${f.id}' in parents and name='DP Safecard' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+      const res2=await fetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q2)+'&fields=files(id)',{headers:{Authorization:'Bearer '+tok}});
+      if(res2.ok){ const d2=await res2.json(); if(d2.files&&d2.files.length) return f.id; }
+    }catch(e){}
+  }
+  return data.files[0].id; // ninguna tenía "DP Safecard" adentro: se usa la primera coincidencia igual
+}
+async function carpetaFotosProyecto_(tok){
+  const pid=projId();
+  if(_carpetaFotosCache[pid]) return _carpetaFotosCache[pid];
+  let raizProyecto=null;
+  try{ raizProyecto=await buscarCarpetaProyectoDP_(tok); }catch(e){ console.warn('No se pudo ubicar la carpeta del proyecto en Drive, se usa la carpeta propia:',e); }
+  let sub;
+  if(raizProyecto){
+    // Se encontró la carpeta real del proyecto (misma donde está DP Safecard): la
+    // subcarpeta de fotos queda justo ahí al lado.
+    sub=await buscarOCrearCarpetaDrive_(tok,'Fotos Seguimiento',raizProyecto);
+  } else {
+    // Respaldo: no se encontró (o no hay acceso) — se usa una carpeta propia del
+    // técnico, organizada por proyecto, para no perder la foto igual.
+    const raiz=await buscarOCrearCarpetaDrive_(tok,'Fotos Seguimiento Safecard',null);
+    const nombreProy=(state.proyecto.nombre||('Proyecto '+pid)).replace(/[\\/:*?"<>|]/g,'-').trim()||('Proyecto '+pid);
+    sub=await buscarOCrearCarpetaDrive_(tok,nombreProy,raiz);
+  }
+  _carpetaFotosCache[pid]=sub;
+  return sub;
+}
+function generarThumb_(dataUri, maxSize, quality){
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      let w=img.width,h=img.height;
+      if(w>maxSize||h>maxSize){const s=Math.min(maxSize/w,maxSize/h);w=Math.round(w*s);h=Math.round(h*s);}
+      const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      resolve(cv.toDataURL('image/jpeg',quality));
+    };
+    img.onerror=()=>resolve(dataUri);
+    img.src=dataUri;
+  });
+}
+// Sube UNA foto (data-URI) a la carpeta del proyecto en Drive y la deja visible por
+// link (para poder mostrarla como <img src=...> sin necesitar volver a autenticar).
+// Devuelve la URL pública de la foto completa.
+async function subirFotoADrive_(dataUri, mimeType, nombreArchivo){
+  return new Promise((resolve,reject)=>{
+    ensureDriveUploadToken(async(tok)=>{
+      try{
+        const folderId=await carpetaFotosProyecto_(tok);
+        const base64=dataUri.split(',')[1];
+        const boundary='-------safecard'+Date.now();
+        const metadata={name:nombreArchivo,parents:[folderId],mimeType};
+        const body='--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(metadata)+
+          '\r\n--'+boundary+'\r\nContent-Type: '+mimeType+'\r\nContent-Transfer-Encoding: base64\r\n\r\n'+base64+
+          '\r\n--'+boundary+'--';
+        const res=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',{
+          method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'multipart/related; boundary='+boundary},body
+        });
+        if(!res.ok) throw new Error('HTTP '+res.status+' al subir la foto');
+        const data=await res.json();
+        // La deja visible "cualquiera con el link" para poder mostrarla directo como <img>.
+        try{
+          await fetch('https://www.googleapis.com/drive/v3/files/'+data.id+'/permissions',{
+            method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},
+            body:JSON.stringify({role:'reader',type:'anyone'})
+          });
+        }catch(e){ console.warn('No se pudo hacer pública la foto (puede que igual funcione si ya hay acceso heredado):',e); }
+        resolve({fileId:data.id, url:'https://drive.google.com/uc?export=view&id='+data.id});
+      }catch(e){ reject(e); }
+    }, msg=>reject(new Error(msg)));
+  });
+}
+
 function abrirPicker(){
   if(!window.gapi){alert('Google Picker aún no carga. Reintenta en unos segundos.');return;}
   const build=()=>{
@@ -1590,7 +1720,7 @@ async function generarInforme(){
     // Miniaturas livianas SOLO para este informe (no se guardan): en el PDF cada foto
     // mide ~120px de alto, así que no tiene sentido incrustar la versión de 1280px guardada.
     // Esto es lo que hacía lento el botón "Informe", sobre todo en el teléfono.
-    const thumbs = await Promise.all(fotosOrd.map(o=>thumbFromDataUrl(o.f.data||o.f.cloudUrl, 380, 0.55)));
+    const thumbs = await Promise.all(fotosOrd.map(o=>thumbFromDataUrl(o.f.data||o.f.driveUrl||o.f.thumb, 380, 0.55)));
     let fotosHtml=fotosOrd.length?('<div class="r-photos">'+fotosOrd.map((o,i)=>`<div class="r-photo"><img src="${thumbs[i]}"><div class="cap">${esc(o.cap)}</div></div>`).join('')+'</div>'):'<p class="small">Sin fotografías cargadas.</p>';
     document.getElementById('reporte').innerHTML=`<div>
       <div class="r-head"><div>${LOGO_REPORT}</div>
