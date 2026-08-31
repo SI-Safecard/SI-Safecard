@@ -429,6 +429,7 @@
     <p class="small" id="bHoyInfo" style="margin-top:8px"></p>
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px;border-top:1px dashed var(--line);padding-top:10px">
       <button class="btn" style="border-color:var(--or);color:var(--or-dark);background:var(--or-soft)" onclick="syncNow(false)">☁️ Sincronizar al Panel</button>
+      <button class="btn" onclick="guardarNube()">☁️⬆️ Guardar en la nube (con fotos)</button>
       <span class="small" id="bSyncStatus" style="font-weight:600">—</span>
     </div>
   </div>
@@ -1094,8 +1095,8 @@ function renderFotos(){
 }
 function pedirEvidencia(id){_evTarget=id;document.getElementById('fileEvidencia').click();}
 function pedirMulti(cat){_multiTarget=cat;document.getElementById('fileMulti').click();}
-document.getElementById('fileEvidencia').addEventListener('change',e=>{const f=e.target.files[0];if(!f||!_evTarget)return;resizeImg(f,data=>{state.fotos=state.fotos.filter(x=>x.equipoId!==_evTarget);const eq=state.equipos.find(x=>x.id===_evTarget);state.fotos.push({id:uid(),cat:'equipo',equipoId:_evTarget,desc:eq?eq.nombre:'',data});renderFotos();dirty();});e.target.value='';});
-document.getElementById('fileMulti').addEventListener('change',e=>{[...e.target.files].forEach(f=>resizeImg(f,data=>{state.fotos.push({id:uid(),cat:_multiTarget,equipoId:null,desc:'',data});renderFotos();dirty();}));e.target.value='';});
+document.getElementById('fileEvidencia').addEventListener('change',e=>{const f=e.target.files[0];if(!f||!_evTarget)return;if(driveConfigOk()&&!_gtokenUpload)ensureDriveUploadToken(()=>{},()=>{});resizeImg(f,data=>{state.fotos=state.fotos.filter(x=>x.equipoId!==_evTarget);const eq=state.equipos.find(x=>x.id===_evTarget);state.fotos.push({id:uid(),cat:'equipo',equipoId:_evTarget,desc:eq?eq.nombre:'',data});renderFotos();dirty();});e.target.value='';});
+document.getElementById('fileMulti').addEventListener('change',e=>{if(driveConfigOk()&&!_gtokenUpload)ensureDriveUploadToken(()=>{},()=>{});[...e.target.files].forEach(f=>resizeImg(f,data=>{state.fotos.push({id:uid(),cat:_multiTarget,equipoId:null,desc:'',data});renderFotos();dirty();}));e.target.value='';});
 function resizeImg(file,cb){const r=new FileReader();r.onload=()=>{const img=new Image();img.onload=()=>{const max=1280;let w=img.width,h=img.height;if(w>max||h>max){const s=Math.min(max/w,max/h);w=Math.round(w*s);h=Math.round(h*s);}const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);cb(cv.toDataURL('image/jpeg',0.72));};img.src=r.result;};r.readAsDataURL(file);}
 function delFoto(id){state.fotos=state.fotos.filter(f=>f.id!==id);renderFotos();dirty();}
 
