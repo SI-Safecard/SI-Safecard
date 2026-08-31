@@ -758,9 +758,10 @@ function extractEquipos(data){
       res.push({sector:name,name:disp,slug,variant,qty,entradaN});
     }
   };
-  // Formato Safecard: baseSector + sectors[]
-  if(st&&(st.baseSector||Array.isArray(st.sectors))){
+  // Formato Safecard: baseSector (viejo, objeto singular) o servers[] (nuevo, arreglo) + sectors[]
+  if(st&&(st.baseSector||Array.isArray(st.servers)||Array.isArray(st.sectors))){
     if(st.baseSector)pushSector(st.baseSector);
+    if(Array.isArray(st.servers))st.servers.forEach(pushSector);
     if(Array.isArray(st.sectors))st.sectors.forEach(pushSector);
     if(res.length)return res;
   }
