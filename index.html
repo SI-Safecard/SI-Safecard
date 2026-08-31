@@ -1080,7 +1080,7 @@ function renderFotos(){
     items.forEach(e=>{
       const foto=state.fotos.find(f=>f.equipoId===e.id);
       const slot=document.createElement('div');slot.className='ev-slot'+(foto?' has':'');
-      slot.innerHTML=`<div class="ev-thumb" onclick="pedirEvidencia('${e.id}')">${foto?`<img src="${foto.data}">`:`<div class="ph"><span class="big">📸</span><span>Subir foto</span></div>`}${foto?`<button class="ev-del" onclick="event.stopPropagation();delFoto('${foto.id}')">✕</button>`:''}</div>
+      slot.innerHTML=`<div class="ev-thumb" onclick="pedirEvidencia('${e.id}')">${foto?`<img src="${foto.data||foto.cloudUrl||''}">`:`<div class="ph"><span class="big">📸</span><span>Subir foto</span></div>`}${foto?`<button class="ev-del" onclick="event.stopPropagation();delFoto('${foto.id}')">✕</button>`:''}</div>
         <div class="ev-meta"><span class="nm">${esc(_EQNM[e.id]||e.nombre)}</span><span class="ev-tag ${foto?'ok':'no'}">${foto?'OK':'falta'}</span></div>`;
       g.appendChild(slot);
     });
@@ -1088,7 +1088,7 @@ function renderFotos(){
   });
   const mz=document.getElementById('multiZones');mz.innerHTML='';
   MULTI_CATS.forEach(cat=>{const fotos=state.fotos.filter(f=>f.cat===cat.id);const div=document.createElement('div');div.className='multi-zone';
-    div.innerHTML=`<h3>${cat.label} <span class="small" style="font-weight:600">· ${fotos.length} foto(s)</span></h3><div class="mz-grid">${fotos.map(f=>`<div class="mz-photo"><img src="${f.data}"><button class="del" onclick="delFoto('${f.id}')">✕</button></div>`).join('')}<div class="mz-add" onclick="pedirMulti('${cat.id}')"><span style="font-size:22px">＋</span>Agregar</div></div>`;
+    div.innerHTML=`<h3>${cat.label} <span class="small" style="font-weight:600">· ${fotos.length} foto(s)</span></h3><div class="mz-grid">${fotos.map(f=>`<div class="mz-photo"><img src="${f.data||f.cloudUrl||''}"><button class="del" onclick="delFoto('${f.id}')">✕</button></div>`).join('')}<div class="mz-add" onclick="pedirMulti('${cat.id}')"><span style="font-size:22px">＋</span>Agregar</div></div>`;
     mz.appendChild(div);});
 }
 function pedirEvidencia(id){_evTarget=id;document.getElementById('fileEvidencia').click();}
@@ -1241,15 +1241,46 @@ async function guardarNube(silent){
   }
   pullProyecto();state.cierreObs=document.getElementById('cierreObs').value;
   const id=projId();
+
+  // Sube a Storage las fotos que todavía no tengan URL en la nube (subir una foto ya
+  // subida antes no la vuelve a subir). Así el documento de Firestore queda liviano
+  // siempre, sin importar cuántas fotos tenga el proyecto.
+  const pendientes=(state.fotos||[]).filter(f=>f.data && !f.cloudUrl);
+  let fotosSubidas=0, fotosFallidas=0;
+  if(pendientes.length && typeof window.SafecardCloud.subirFoto==='function'){
+    if(silent) setSyncStatus('☁️ Subiendo '+pendientes.length+' foto(s) nueva(s)…','var(--muted)');
+    for(const f of pendientes){
+      try{
+        f.cloudUrl=await window.SafecardCloud.subirFoto(id, f.id, f.data);
+        fotosSubidas++;
+      }catch(e){ fotosFallidas++; console.warn('No se pudo subir la foto '+f.id+':', e); }
+    }
+    dirty(); // las fotos ya tienen cloudUrl; guarda ese cambio también localmente
+  }
+
   let st=JSON.parse(JSON.stringify(state));
+  // El documento de Firestore nunca necesita el base64 completo de las fotos que ya
+  // tienen URL en Storage — así el documento se mantiene liviano siempre.
+  if(Array.isArray(st.fotos)){
+    st.fotos=st.fotos.map(f=> f.cloudUrl ? Object.assign({},f,{data:undefined}) : f);
+  }
   let sinFotos=false;
   let stStr=JSON.stringify(st);
-  if(stStr.length>900000){st.fotos=[];stStr=JSON.stringify(st);sinFotos=true;}
+  if(stStr.length>900000){
+    // Respaldo: si aun así pesa demasiado (fotos sin subir por algún fallo de red),
+    // se sacan del documento para no perder el resto del avance.
+    st.fotos=(st.fotos||[]).map(f=>f.cloudUrl?{id:f.id,cat:f.cat,equipoId:f.equipoId,desc:f.desc,cloudUrl:f.cloudUrl}:null).filter(Boolean);
+    stStr=JSON.stringify(st);
+    if(stStr.length>900000){ st.fotos=[]; stStr=JSON.stringify(st); }
+    sinFotos=true;
+  }
   let payload={nombre:state.proyecto.nombre||'',pid:state.proyecto.pid||'',updatedBy:state.proyecto.jefe||'',stateJson:stStr,sinFotos:sinFotos};
   try{
     await window.SafecardCloud.save(id,payload);
-    if(!silent){alert('✅ Avance guardado en la nube.'+(sinFotos?'\n\n(Las fotos no se subieron por tamaño; quedan solo en este dispositivo.)':'')+'\n\nAhora puedes cargarlo en otro dispositivo con “☁️ Cargar de la nube”.');}
-    else{setSyncStatus('☁️ Bitácora guardada en la nube — mañana puedes seguir desde aquí'+(sinFotos?' (fotos no incluidas, muy pesado)':''),'var(--green)');}
+    const detFotos = fotosSubidas ? (' · '+fotosSubidas+' foto(s) subida(s) a la nube') : '';
+    const avisoFallo = fotosFallidas ? (' ⚠️ '+fotosFallidas+' foto(s) no se pudieron subir (revisa la conexión).') : '';
+    if(!silent){alert('✅ Avance guardado en la nube.'+detFotos+avisoFallo+(sinFotos?'\n\n(Quedó algo pesado igual; revisa la conexión.)':'')+'\n\nAhora puedes cargarlo en otro dispositivo con “☁️ Cargar de la nube”.');}
+    else{setSyncStatus('☁️ Bitácora guardada en la nube — mañana puedes seguir desde aquí'+detFotos+avisoFallo,sinFotos?'var(--pc)':'var(--green)');}
   }catch(e){
     if(!silent){alert('No se pudo guardar en la nube: '+(e.message||e));}
     else{setSyncStatus('⚠ No se pudo guardar en la nube: '+(e.message||e),'var(--nc)');}
@@ -1513,6 +1544,7 @@ document.getElementById('fileSesion').addEventListener('change',e=>{const f=e.ta
 function thumbFromDataUrl(dataUrl, maxSize, quality){
   return new Promise(resolve=>{
     const img=new Image();
+    img.crossOrigin='anonymous'; // necesario para poder leer el canvas si la foto viene de una URL remota (Storage), no solo data-URI local
     img.onload=()=>{
       let w=img.width,h=img.height;
       if(w>maxSize||h>maxSize){const s=Math.min(maxSize/w,maxSize/h);w=Math.round(w*s);h=Math.round(h*s);}
@@ -1551,7 +1583,7 @@ async function generarInforme(){
     // Miniaturas livianas SOLO para este informe (no se guardan): en el PDF cada foto
     // mide ~120px de alto, así que no tiene sentido incrustar la versión de 1280px guardada.
     // Esto es lo que hacía lento el botón "Informe", sobre todo en el teléfono.
-    const thumbs = await Promise.all(fotosOrd.map(o=>thumbFromDataUrl(o.f.data, 380, 0.55)));
+    const thumbs = await Promise.all(fotosOrd.map(o=>thumbFromDataUrl(o.f.data||o.f.cloudUrl, 380, 0.55)));
     let fotosHtml=fotosOrd.length?('<div class="r-photos">'+fotosOrd.map((o,i)=>`<div class="r-photo"><img src="${thumbs[i]}"><div class="cap">${esc(o.cap)}</div></div>`).join('')+'</div>'):'<p class="small">Sin fotografías cargadas.</p>';
     document.getElementById('reporte').innerHTML=`<div>
       <div class="r-head"><div>${LOGO_REPORT}</div>
@@ -2049,9 +2081,11 @@ window.EDITORES = ["nicolas.jara@safecard.cl","fabian.pavez@safecard.cl","franci
       const {initializeApp}=await import("https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js");
       const {getFirestore,doc,setDoc,getDoc,getDocs,collection,serverTimestamp}=await import("https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js");
       const {getAuth,signInAnonymously}=await import("https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js");
+      const {getStorage,ref,uploadString,getDownloadURL}=await import("https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js");
       const app=initializeApp(FB);
       const db=getFirestore(app);
       const auth=getAuth(app);
+      const storage=getStorage(app);
       try{ await signInAnonymously(auth); }catch(e){ console.warn('Auth anónima falló:',e.code); }
       window.SafecardSync={
         enabled:true,
@@ -2064,7 +2098,14 @@ window.EDITORES = ["nicolas.jara@safecard.cl","fabian.pavez@safecard.cl","franci
         enabled:true,
         async save(id,payload){ await setDoc(doc(db,'avances',id), Object.assign({},payload,{updatedAt:serverTimestamp()}), {merge:false}); },
         async load(id){ const s=await getDoc(doc(db,'avances',id)); return s.exists()?s.data():null; },
-        async list(){ const q=await getDocs(collection(db,'avances')); const out=[]; q.forEach(d=>{const x=d.data(); out.push({id:d.id, nombre:x.nombre||'', pid:x.pid||'', updatedAt:x.updatedAt||null, sinFotos:!!x.sinFotos});}); return out; }
+        async list(){ const q=await getDocs(collection(db,'avances')); const out=[]; q.forEach(d=>{const x=d.data(); out.push({id:d.id, nombre:x.nombre||'', pid:x.pid||'', updatedAt:x.updatedAt||null, sinFotos:!!x.sinFotos});}); return out; },
+        // Sube UNA foto (data-URI base64) a Firebase Storage y devuelve su URL pública.
+        // Así las fotos quedan afuera del documento de Firestore (que tiene límite de 1MB).
+        async subirFoto(pid, fotoId, dataUri){
+          const r=ref(storage, 'fotos/'+pid+'/'+fotoId+'.jpg');
+          await uploadString(r, dataUri, 'data_url');
+          return await getDownloadURL(r);
+        }
       };
       window.dispatchEvent(new Event('safecard-sync-ready'));
     }catch(e){
