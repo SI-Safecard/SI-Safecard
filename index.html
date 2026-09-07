@@ -438,10 +438,12 @@
     <div class="card-title-bar"><h2>📅 Días efectivos de instalación</h2></div>
     <p class="small" style="margin-bottom:10px">Marca los días en que se sacó a los técnicos del proyecto (emergencias, otros trabajos, etc.) para llevar la trazabilidad real de cuántos días se trabajó de verdad, aparte de los días de calendario transcurridos.</p>
     <div class="row-flex">
-      <div style="width:180px"><label>Fecha</label><input type="date" id="diaNoEfFecha"></div>
+      <div style="width:160px"><label>Desde</label><input type="date" id="diaNoEfDesde"></div>
+      <div style="width:160px"><label>Hasta (opcional)</label><input type="date" id="diaNoEfHasta"></div>
       <div class="grow"><label>Motivo (opcional)</label><input id="diaNoEfMotivo" placeholder="Ej: emergencia en otro proyecto"></div>
-      <button class="btn" style="border-color:var(--nc);color:var(--nc)" onclick="marcarDiaNoEfectivo()">🚫 Marcar día no efectivo</button>
+      <button class="btn" style="border-color:var(--nc);color:var(--nc)" onclick="marcarDiaNoEfectivo()">🚫 Marcar rango como no efectivo</button>
     </div>
+    <p class="small" style="color:var(--muted);margin-top:2px">Si dejas "Hasta" vacío, se marca solo el día de "Desde". Si pones ambos, se marcan todos los días del rango de una vez.</p>
     <div id="diasEfectivosResumen" style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap"></div>
     <div id="diasNoEfectivosList" style="margin-top:10px"></div>
   </div>
@@ -1957,13 +1959,35 @@ function delBitacora(id){if(!confirm('¿Eliminar este registro?'))return;state.b
 
 function marcarDiaNoEfectivo(){
   if(!requiereEditar())return;
-  const fecha=document.getElementById('diaNoEfFecha').value||hoyISO();
+  const desde=document.getElementById('diaNoEfDesde').value||hoyISO();
+  const hastaInput=document.getElementById('diaNoEfHasta').value;
+  const hasta=hastaInput||desde;
   const motivo=document.getElementById('diaNoEfMotivo').value||'';
+  if(hasta<desde){alert('La fecha "Hasta" no puede ser anterior a "Desde".');return;}
   state.diasNoEfectivos=state.diasNoEfectivos||[];
-  if(state.diasNoEfectivos.some(d=>d.fecha===fecha)){alert('Ese día ya está marcado como no efectivo.');return;}
-  state.diasNoEfectivos.push({id:uid(),fecha,motivo});
+  let agregados=0, yaExistian=0;
+  let cur=new Date(desde+'T00:00:00');
+  const fin=new Date(hasta+'T00:00:00');
+  while(cur<=fin){
+    const fecha=cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(cur.getDate()).padStart(2,'0');
+    if(state.diasNoEfectivos.some(d=>d.fecha===fecha)){ yaExistian++; }
+    else { state.diasNoEfectivos.push({id:uid(),fecha,motivo}); agregados++; }
+    cur.setDate(cur.getDate()+1);
+  }
   document.getElementById('diaNoEfMotivo').value='';
   renderDiasEfectivos();dirty();
+  if(agregados===0){ alert('Todos los días de ese rango ya estaban marcados.'); return; }
+  if(yaExistian>0) setMsgGlobal_(`✅ ${agregados} día(s) marcado(s) como no efectivo(s) (${yaExistian} ya estaban marcados y se saltaron).`);
+}
+function setMsgGlobal_(txt){
+  const el=document.getElementById('diasEfectivosResumen');
+  if(!el) return;
+  const aviso=document.createElement('div');
+  aviso.className='small';
+  aviso.style.cssText='width:100%;color:var(--green);font-weight:600;margin-bottom:4px';
+  aviso.textContent=txt;
+  el.parentNode.insertBefore(aviso, el);
+  setTimeout(()=>aviso.remove(), 5000);
 }
 function quitarDiaNoEfectivo(id){
   state.diasNoEfectivos=(state.diasNoEfectivos||[]).filter(d=>d.id!==id);
