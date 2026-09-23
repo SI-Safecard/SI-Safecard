@@ -2199,7 +2199,15 @@ async function cargarProyectoDesdeURL(){
     const data=await window.SafecardCloud.load(pid);
     const st=estadoDeNube(data);
     if(st){applyLoaded(st);_dirty=false;return true;}
-    alert('Este proyecto aún no tiene un avance guardado en la nube.\nLa cuadrilla debe guardarlo una vez desde la app (☁️ Guardar en la nube o registrar avance).');
+    // No hay un respaldo detallado guardado en 'avances' todavía (nadie usó
+    // "☁️ Guardar en la nube" en este proyecto). Igual seguimos con ESTE
+    // mismo id — nunca uno nuevo al azar — para que lo que se registre en
+    // esta sesión se sume al proyecto que YA existe en el Panel de Control,
+    // en vez de crear un proyecto duplicado y desconectado.
+    applyLoaded({proyecto:{id:pid}});
+    _dirty=false;
+    alert('Este proyecto todavía no tiene un respaldo detallado guardado en la nube, así que no se pudo traer el detalle de equipos/QC ya cargado (nadie usó "☁️ Guardar en la nube" en él antes).\n\nDe todas formas, lo que registres ahora en esta sesión sí va a sumarse correctamente al proyecto en el Panel de Control.\n\nSi necesitas recuperar el detalle anterior, pide a quien lo cargó que presione "☁️ Guardar en la nube" desde su dispositivo, o vuelve a cargar el Detalle de Proyecto.');
+    return true;
   }catch(e){alert('No se pudo abrir el proyecto desde la nube: '+(e.message||e));}
   return false;
 }
