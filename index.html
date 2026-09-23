@@ -351,6 +351,26 @@
     </div>
   </div>
 
+  <div class="card">
+    <div class="card-title-bar"><h2>📞 Contactos</h2></div>
+    <p class="hint">Se traen automáticamente del Detalle de Proyecto si vienen cargados ahí. Si no, complétalos aquí manualmente.</p>
+    <div class="grid c3" style="margin-bottom:14px">
+      <div><label>Contacto Administración <span class="auto-fill">del JSON</span></label><input id="p_ca_n" placeholder="Nombre" oninput="dirty()"></div>
+      <div><label>&nbsp;</label><input id="p_ca_t" placeholder="Teléfono" oninput="dirty()"></div>
+      <div><label>&nbsp;</label><input id="p_ca_e" placeholder="Email" oninput="dirty()"></div>
+    </div>
+    <div class="grid c3" style="margin-bottom:14px">
+      <div><label>Contacto Instalación <span class="auto-fill">del JSON</span></label><input id="p_ci_n" placeholder="Nombre" oninput="dirty()"></div>
+      <div><label>&nbsp;</label><input id="p_ci_t" placeholder="Teléfono" oninput="dirty()"></div>
+      <div><label>&nbsp;</label><input id="p_ci_e" placeholder="Email" oninput="dirty()"></div>
+    </div>
+    <div class="grid c3">
+      <div><label>Contacto Comercial <span class="auto-fill">del JSON</span></label><input id="p_cc_n" placeholder="Nombre" oninput="dirty()"></div>
+      <div><label>&nbsp;</label><input id="p_cc_t" placeholder="Teléfono" oninput="dirty()"></div>
+      <div><label>&nbsp;</label><input id="p_cc_e" placeholder="Email" oninput="dirty()"></div>
+    </div>
+  </div>
+
   <div class="card" id="dashCard" style="display:none">
     <div class="card-title-bar"><h2>📊 Dashboard del proyecto</h2><span class="pill or" id="dashEstado">—</span></div>
     <div id="dashboard"></div>
@@ -679,7 +699,8 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
 }));
 
 /* PROYECTO */
-const PF={p_nombre:'nombre',p_pid:'pid',p_direccion:'direccion',p_ejecutivo:'ejecutivo',p_inicio:'inicio',p_termino:'termino',p_limite:'limite'};
+const PF={p_nombre:'nombre',p_pid:'pid',p_direccion:'direccion',p_ejecutivo:'ejecutivo',p_inicio:'inicio',p_termino:'termino',p_limite:'limite',
+  p_ca_n:'ca_n',p_ca_t:'ca_t',p_ca_e:'ca_e', p_ci_n:'ci_n',p_ci_t:'ci_t',p_ci_e:'ci_e', p_cc_n:'cc_n',p_cc_t:'cc_t',p_cc_e:'cc_e'};
 function pullProyecto(){for(const[el,k]of Object.entries(PF))state.proyecto[k]=document.getElementById(el).value;state.proyecto.estado=document.getElementById('p_estadosel').value;state.proyecto.jefe=document.getElementById('p_jefe').value;}
 function pushProyecto(){for(const[el,k]of Object.entries(PF))document.getElementById(el).value=state.proyecto[k]||'';document.getElementById('p_estadosel').value=state.proyecto.estado||'Sin iniciar';document.getElementById('p_jefe').value=state.proyecto.jefe||'';renderEstado();renderTecAsg();}
 const TECNICOS=['Pedro Rivera','Matías Silva','Sebastián Espinoza','Ciro Forte','Ariel Lazo','Jhon Villegas'];
@@ -808,6 +829,13 @@ function parseDetalle(data,fname){
   // Ejecutivo comercial
   const eje=F.p_ej||guess(['p_ej','ejecutivocomercial','ejecutivo','vendedor','comercial']);
   if(eje&&/[a-záéíóúñ]/i.test(String(eje)))document.getElementById('p_ejecutivo').value=eje;
+  // Contactos (Administración / Instalación / Comercial): mismos campos que usa DP-Safecard
+  [['p_ca_n','ca_n'],['p_ca_t','ca_t'],['p_ca_e','ca_e'],
+   ['p_ci_n','ci_n'],['p_ci_t','ci_t'],['p_ci_e','ci_e'],
+   ['p_cc_n','cc_n'],['p_cc_t','cc_t'],['p_cc_e','cc_e']].forEach(([elId,key])=>{
+    const v=F[key];
+    if(v&&String(v).trim()!=='')document.getElementById(elId).value=String(v).trim();
+  });
   // Plan técnico (para sugerir insumos con datos reales)
   state.techPlan={utp:toNum(F.t_utp),fibra:toNum(F.t_fibra),emt:toNum(F.t_emt),pvc:toNum(F.t_pvc)};
   // Plazo estipulado y fechas tentativas para el cronograma
@@ -2119,6 +2147,9 @@ function buildSnapshot(){
     diasRest: sc.ok?sc.diasRest:null, diasTrans: sc.ok?sc.diasTrans:null,
     expected: sc.ok?sc.expected:null, gap: sc.ok?sc.gap:null,
     diasPlan, diasReales, desvioDias,
+    ca_n:p.ca_n||'', ca_t:p.ca_t||'', ca_e:p.ca_e||'',
+    ci_n:p.ci_n||'', ci_t:p.ci_t||'', ci_e:p.ci_e||'',
+    cc_n:p.cc_n||'', cc_t:p.cc_t||'', cc_e:p.cc_e||'',
     updatedBy: p.jefe||''
   };
 }
