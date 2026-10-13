@@ -1097,39 +1097,92 @@ function renderFotos(){
 }
 function pedirEvidencia(id){_evTarget=id;document.getElementById('fileEvidencia').click();}
 function pedirMulti(cat){_multiTarget=cat;document.getElementById('fileMulti').click();}
-document.getElementById('fileEvidencia').addEventListener('change',e=>{const f=e.target.files[0];if(!f||!_evTarget)return;if(driveConfigOk()&&!_gtokenUpload)ensureDriveUploadToken(()=>{},()=>{});resizeImg(f,data=>{state.fotos=state.fotos.filter(x=>x.equipoId!==_evTarget);const eq=state.equipos.find(x=>x.id===_evTarget);state.fotos.push({id:uid(),cat:'equipo',equipoId:_evTarget,desc:eq?eq.nombre:'',data});renderFotos();dirty();});e.target.value='';});
-document.getElementById('fileMulti').addEventListener('change',e=>{if(driveConfigOk()&&!_gtokenUpload)ensureDriveUploadToken(()=>{},()=>{});[...e.target.files].forEach(f=>resizeImg(f,data=>{state.fotos.push({id:uid(),cat:_multiTarget,equipoId:null,desc:'',data});renderFotos();dirty();}));e.target.value='';});
+document.getElementById('fileEvidencia').addEventListener('change',e=>{const f=soloFotos_(e.target.files)[0];if(!f||!_evTarget)return;if(driveConfigOk()&&!_gtokenUpload)ensureDriveUploadToken(()=>{},()=>{});resizeImg(f,data=>{state.fotos=state.fotos.filter(x=>x.equipoId!==_evTarget);const eq=state.equipos.find(x=>x.id===_evTarget);state.fotos.push({id:uid(),cat:'equipo',equipoId:_evTarget,desc:eq?eq.nombre:'',data});renderFotos();dirty();});e.target.value='';});
+document.getElementById('fileMulti').addEventListener('change',e=>{if(driveConfigOk()&&!_gtokenUpload)ensureDriveUploadToken(()=>{},()=>{});soloFotos_(e.target.files).forEach(f=>resizeImg(f,data=>{state.fotos.push({id:uid(),cat:_multiTarget,equipoId:null,desc:'',data});renderFotos();dirty();}));e.target.value='';});
 function esHeicFile_(f){return /heic|heif/i.test(f.type||'')||/\.(heic|heif)$/i.test(f.name||'');}
-let _avisoFotoT=null;
-function avisoFotoNoLeida_(nombre){
-  // Un solo aviso aunque fallen varias fotos seguidas
-  clearTimeout(_avisoFotoT);
-  _avisoFotoT=setTimeout(()=>alert('⚠️ No se pudo leer la foto'+(nombre?(' "'+nombre+'"'):'')+'.\n\nSi viene de un iPhone o Mac, puede estar en formato HEIC. Prueba sacando la foto de nuevo con la cámara de la app, o conviértela a JPG.'),50);
+function esFotoFile_(f){return /^image\//i.test(f.type||'')||esHeicFile_(f)||(!f.type&&/\.(jpe?g|png|webp|gif|bmp)$/i.test(f.name||''));}
+
+// La librería de conversión HEIC (pesa ~3 MB) se descarga solo la primera vez que hace falta.
+let _heicToPromise=null;
+function cargarHeicTo_(){
+  if(typeof HeicTo==='function') return Promise.resolve();
+  if(!_heicToPromise){
+    _heicToPromise=new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdn.jsdelivr.net/npm/heic-to@1.5.2/dist/iife/heic-to.js';
+      s.onload=res;
+      s.onerror=()=>{_heicToPromise=null;rej(new Error('No cargó la librería HEIC'));};
+      document.head.appendChild(s);
+    });
+  }
+  return _heicToPromise;
 }
-async function resizeImg(file,cb){
-  let src=file;
+// Intenta convertir HEIC → JPG: 1) librería nueva, 2) librería anterior, 3) el original
+// (Safari sí sabe leer HEIC por sí solo).
+async function convertirHeic_(file){
   try{
-    // Las fotos HEIC (iPhone / Mac) el navegador no las puede dibujar: se convierten a JPG primero
-    if(esHeicFile_(file)&&typeof heic2any==='function'){
+    await cargarHeicTo_();
+    if(typeof HeicTo==='function') return await HeicTo({blob:file,type:'image/jpeg',quality:0.85});
+  }catch(e){ console.warn('heic-to falló:',e); }
+  try{
+    if(typeof heic2any==='function'){
       const out=await heic2any({blob:file,toType:'image/jpeg',quality:0.85});
-      src=out instanceof Blob?out:out[0];
+      return out instanceof Blob?out:out[0];
     }
-  }catch(e){ console.warn('No se pudo convertir HEIC:',e); }
-  const r=new FileReader();
-  r.onerror=()=>avisoFotoNoLeida_(file.name);
-  r.onload=()=>{
+  }catch(e){ console.warn('heic2any falló:',e); }
+  return file;
+}
+function dibujarYComprimir_(blob){
+  return new Promise((res,rej)=>{
+    const url=URL.createObjectURL(blob); // evita crear un base64 gigante de la foto original
     const img=new Image();
-    img.onerror=()=>avisoFotoNoLeida_(file.name);
+    img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('imagen'));};
     img.onload=()=>{
-      const max=1280;let w=img.width,h=img.height;
-      if(w>max||h>max){const s=Math.min(max/w,max/h);w=Math.round(w*s);h=Math.round(h*s);}
-      const cv=document.createElement('canvas');cv.width=w;cv.height=h;
-      cv.getContext('2d').drawImage(img,0,0,w,h);
-      cb(cv.toDataURL('image/jpeg',0.72));
+      try{
+        const max=1280;let w=img.width,h=img.height;
+        if(w>max||h>max){const s=Math.min(max/w,max/h);w=Math.round(w*s);h=Math.round(h*s);}
+        const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        const out=cv.toDataURL('image/jpeg',0.72);
+        URL.revokeObjectURL(url);res(out);
+      }catch(e){URL.revokeObjectURL(url);rej(e);}
     };
-    img.src=r.result;
-  };
-  r.readAsDataURL(src);
+    img.src=url;
+  });
+}
+// Las fotos se procesan UNA A LA VEZ (en cola): convertir 18 fotos HEIC al mismo tiempo
+// agota la memoria del navegador y hace que fallen varias.
+let _colaFotos=Promise.resolve(),_fotosTotal=0,_fotosHechas=0,_fotosFallidas=[];
+function progresoFotos_(){
+  let el=document.getElementById('fotoProgreso');
+  if(_fotosTotal===0||_fotosHechas>=_fotosTotal){ if(el)el.remove(); return; }
+  if(!el){
+    el=document.createElement('div');el.id='fotoProgreso';
+    el.style.cssText='position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#1F2933;color:#fff;padding:10px 18px;border-radius:999px;font-size:13px;font-weight:700;z-index:99999;box-shadow:0 4px 14px rgba(0,0,0,.3)';
+    document.body.appendChild(el);
+  }
+  el.textContent='📷 Procesando fotos… '+(_fotosHechas+1)+' de '+_fotosTotal;
+}
+function resizeImg(file,cb){
+  _fotosTotal++;progresoFotos_();
+  _colaFotos=_colaFotos.then(async()=>{
+    try{
+      const src=esHeicFile_(file)?await convertirHeic_(file):file;
+      cb(await dibujarYComprimir_(src));
+    }catch(e){ console.warn('Foto no leída:',file&&file.name,e); _fotosFallidas.push((file&&file.name)||'foto'); }
+  }).then(()=>{
+    _fotosHechas++;
+    if(_fotosHechas>=_fotosTotal){
+      const fallidas=_fotosFallidas.slice();_fotosTotal=0;_fotosHechas=0;_fotosFallidas=[];
+      progresoFotos_();
+      if(fallidas.length) alert('⚠️ No se pudieron leer '+fallidas.length+' foto(s):\n\n'+fallidas.slice(0,10).join('\n')+(fallidas.length>10?'\n…':'')+'\n\nIntenta subirlas de nuevo, o conviértelas a JPG.');
+    } else progresoFotos_();
+  });
+}
+function soloFotos_(files){
+  const todos=[...files],fotos=todos.filter(esFotoFile_),omitidas=todos.length-fotos.length;
+  if(omitidas) setTimeout(()=>alert(omitidas+' archivo(s) no son fotos (por ejemplo videos .MOV) y se omitieron.'),0);
+  return fotos;
 }
 function delFoto(id){state.fotos=state.fotos.filter(f=>f.id!==id);renderFotos();dirty();}
 
