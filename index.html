@@ -998,7 +998,7 @@ function setUnit(id,f,v){const e=state.equipos.find(x=>x.id===id);if(!e)return;e
 function toggleStage(id,i){const e=state.equipos.find(x=>x.id===id);e.etapas[i]=!e.etapas[i];renderEquipos();recalc();dirty();}
 function markPrev(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;const all=e.etapas.slice(0,4).every(Boolean);for(let i=0;i<4;i++)e.etapas[i]=!all;renderEquipos();recalc();dirty();}
 function toggleTerreno(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.enTerreno=!e.enTerreno;if(e.enTerreno&&!e.fechaTerreno)e.fechaTerreno=hoyISO();renderEquipos();dirty();}
-function toggleDevolucion(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.devolucion=!e.devolucion;renderEquipos();renderDevolucionLista();try{recalc();}catch(err){}dirty();}
+function toggleDevolucion(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.devolucion=!e.devolucion;renderEquipos();renderDevolucionLista();renderFotos();try{recalc();}catch(err){}dirty();}
 function renderDevolucionLista(){
   const cont=document.getElementById('devolucionLista'),btn=document.getElementById('btnDevolucion');
   if(!cont)return;
@@ -1074,11 +1074,13 @@ function setQC(code,f,v){state.qc[code][f]=v;recalc();dirty();}
 /* FOTOS */
 let _evTarget=null,_multiTarget=null;
 function renderFotos(){
-  document.getElementById('evEmpty').style.display=state.equipos.length?'none':'block';
+  document.getElementById('evEmpty').style.display=equiposActivos().length?'none':'block';
   const conPhoto=equiposActivos().filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
   document.getElementById('evContador').textContent=`Evidencia: ${conPhoto}/${equiposActivos().length} equipos con foto. Las imágenes se comprimen automáticamente.`;
   const cont=document.getElementById('evGroups');cont.innerHTML='';
-  bySector().forEach((items,sector)=>{
+  bySector().forEach((items0,sector)=>{
+    const items=items0.filter(e=>!e.devolucion); // los equipos con devolución a bodega no llevan foto
+    if(!items.length)return;
     const h=document.createElement('div');h.className='sector-head';
     const ok=items.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
     h.innerHTML=`<span class="nm">${esc(sector)}</span><span class="badge">${ok}/${items.length} con foto</span>`;
@@ -1339,7 +1341,8 @@ async function guardarNube(silent){
   // link ahí — la foto completa queda en Drive, y solo se guarda una miniatura muy
   // liviana en la nube (Firestore) para que la app se mantenga rápida. Una foto ya
   // subida antes no se vuelve a subir.
-  const pendientes=(state.fotos||[]).filter(f=>f.data && !f.driveUrl);
+  const _idsDev=new Set(state.equipos.filter(e=>e.devolucion).map(e=>e.id));
+  const pendientes=(state.fotos||[]).filter(f=>f.data && !f.driveUrl && !_idsDev.has(f.equipoId));
   let fotosSubidas=0, fotosFallidas=0, _ultimoErrorFotoDrive='';
   // En un guardado SILENCIOSO (automático tras registrar un avance) y sin haber
   // autorizado Drive todavía en esta sesión, el navegador casi siempre bloquea el
