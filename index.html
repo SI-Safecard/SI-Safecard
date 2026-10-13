@@ -899,6 +899,8 @@ function duplicarEquipo(id){
   state.equipos.splice(idx+1,0,copia);
   renderEquipos();renderFotos();dirty();
 }
+// Equipos que cuentan para avance, informe y acta: los marcados con devolución a bodega quedan fuera.
+function equiposActivos(){return state.equipos.filter(e=>!e.devolucion);}
 function bySector(){const m=new Map();state.equipos.forEach(e=>{const s=e.sector||'General';if(!m.has(s))m.set(s,[]);m.get(s).push(e);});return m;}
 let _EQNM={};
 let qaUnitOpen=new Set();
@@ -909,11 +911,12 @@ function renderEquipos(){
   _EQNM={};dispNames(state.equipos).forEach(x=>_EQNM[x.e.id]=x.disp);
   renderDevolucionLista();
   bySector().forEach((items,sector)=>{
-    const total=items.length*INSTALL_STAGES.length;
-    const done=items.reduce((a,e)=>a+e.etapas.filter(Boolean).length,0);
+    const itemsAct=items.filter(e=>!e.devolucion),nDev=items.length-itemsAct.length;
+    const total=itemsAct.length*INSTALL_STAGES.length;
+    const done=itemsAct.reduce((a,e)=>a+e.etapas.filter(Boolean).length,0);
     const secPct=total?Math.round(done/total*100):0;
     const h=document.createElement('div');h.className='sector-head';
-    h.innerHTML=`<span class="nm">${esc(sector)}</span><span class="badge">${items.length} equipo(s) · ${secPct}%</span>
+    h.innerHTML=`<span class="nm">${esc(sector)}</span><span class="badge">${itemsAct.length} equipo(s)${nDev?` · ${nDev} devuelto(s)`:''} · ${secPct}%</span>
       <div class="eq-mini" style="width:120px;margin-top:0"><span style="width:${secPct}%;background:var(--or)"></span></div>`;
     c.appendChild(h);
     items.forEach(e=>{
@@ -995,7 +998,7 @@ function setUnit(id,f,v){const e=state.equipos.find(x=>x.id===id);if(!e)return;e
 function toggleStage(id,i){const e=state.equipos.find(x=>x.id===id);e.etapas[i]=!e.etapas[i];renderEquipos();recalc();dirty();}
 function markPrev(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;const all=e.etapas.slice(0,4).every(Boolean);for(let i=0;i<4;i++)e.etapas[i]=!all;renderEquipos();recalc();dirty();}
 function toggleTerreno(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.enTerreno=!e.enTerreno;if(e.enTerreno&&!e.fechaTerreno)e.fechaTerreno=hoyISO();renderEquipos();dirty();}
-function toggleDevolucion(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.devolucion=!e.devolucion;renderEquipos();renderDevolucionLista();dirty();}
+function toggleDevolucion(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.devolucion=!e.devolucion;renderEquipos();renderDevolucionLista();try{recalc();}catch(err){}dirty();}
 function renderDevolucionLista(){
   const cont=document.getElementById('devolucionLista'),btn=document.getElementById('btnDevolucion');
   if(!cont)return;
@@ -1015,14 +1018,15 @@ async function realizarDevolucion(){
   if(!window.DEVOLUCION_ENDPOINT||/PEGA_AQUI/.test(window.DEVOLUCION_ENDPOINT)){alert('Falta configurar el endpoint de devolución (window.DEVOLUCION_ENDPOINT) en este archivo.');return;}
   if(!confirm('¿Enviar correo de devolución con '+marcados.length+' equipo(s)?'))return;
   const disp={};dispNames(state.equipos).forEach(x=>disp[x.e.id]=x.disp);
-  const payload={proyecto:state.proyecto.nombre||'',responsable:state.proyecto.jefe||'',equipos:marcados.map(e=>({nombre:disp[e.id]||e.nombre,ip:e.ip||'',sector:e.sector||''}))};
+  const ses=sesion()||{};
+  const payload={proyecto:state.proyecto.nombre||'',responsable:state.proyecto.jefe||'',tecnico:ses.nombre||'',correoTecnico:ses.email||'',equipos:marcados.map(e=>({nombre:disp[e.id]||e.nombre,ip:e.ip||'',sector:e.sector||''}))};
   const status=document.getElementById('devolucionStatus');
   status.textContent='Enviando…';status.style.color='var(--muted)';
   try{
     const res=await fetch(window.DEVOLUCION_ENDPOINT,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
     const data=await res.json();
     if(data&&data.ok){
-      status.textContent='✅ Correo de devolución enviado ('+data.enviados+' equipo(s)).';status.style.color='var(--green)';
+      status.textContent='✅ Correo de devolución enviado ('+data.enviados+' equipo(s)) a: '+((data.destinatarios||[]).join(', ')||'bodega')+'.';status.style.color='var(--green)';
     }else{
       status.textContent='⚠ '+((data&&data.error)||'No se pudo enviar.');status.style.color='var(--nc)';
     }
@@ -1071,8 +1075,8 @@ function setQC(code,f,v){state.qc[code][f]=v;recalc();dirty();}
 let _evTarget=null,_multiTarget=null;
 function renderFotos(){
   document.getElementById('evEmpty').style.display=state.equipos.length?'none':'block';
-  const conPhoto=state.equipos.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
-  document.getElementById('evContador').textContent=`Evidencia: ${conPhoto}/${state.equipos.length} equipos con foto. Las imágenes se comprimen automáticamente.`;
+  const conPhoto=equiposActivos().filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
+  document.getElementById('evContador').textContent=`Evidencia: ${conPhoto}/${equiposActivos().length} equipos con foto. Las imágenes se comprimen automáticamente.`;
   const cont=document.getElementById('evGroups');cont.innerHTML='';
   bySector().forEach((items,sector)=>{
     const h=document.createElement('div');h.className='sector-head';
@@ -1220,10 +1224,11 @@ function sugerirInsumos(){generarMateriales();}
 /* RECALC */
 function recalc(){
   pullProyecto();
-  let done=0,total=0;state.equipos.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
-  const av=total?Math.round(done/total*100):0;const tot=state.equipos.length;
-  const cabReady=state.equipos.filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
-  const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
+  const eqA=equiposActivos();
+  let done=0,total=0;eqA.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
+  const av=total?Math.round(done/total*100):0;const tot=eqA.length;
+  const cabReady=eqA.filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
+  const listos=eqA.filter(e=>e.etapas.every(Boolean)).length;
   setText('kEquipos',tot);setText('kCab',cabPct+'%');setText('kListos',listos+'/'+tot);setText('kAvance',av+'%');setText('pillAvanceGlobal',av+'%');document.getElementById('barAvance').style.width=av+'%';
   let pts=0,maxAll=0,nc=0,ev=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;if(s.max>0)ev++;q.evals.forEach(v=>{if(v==='NC')nc++;});});
   const conf=maxAll?Math.round(pts/maxAll*100):0;setText('qcPuntaje',pts+' / '+maxAll);setText('qcConf',conf+'%');setText('qcNC',nc);setText('qcEval',ev+'/'+QC_DEFS.length);setText('pillQC',conf+'%');document.getElementById('barQC').style.width=conf+'%';
@@ -1248,28 +1253,28 @@ function barsHtml(rows,green){
 }
 function renderDashboard(){
   const dash=document.getElementById('dashboard');const card=document.getElementById('dashCard');if(!dash)return;
-  const N=state.equipos.length;
+  const eqA=equiposActivos();const N=eqA.length;
   if(N===0){card.style.display='none';return;}
   card.style.display='block';
   document.getElementById('dashEstado').textContent=state.proyecto.estado||'Sin iniciar';
   // avance
-  let done=0,total=0;state.equipos.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
+  let done=0,total=0;eqA.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
   const av=total?Math.round(done/total*100):0;
-  const completados=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
-  const sinIniciar=state.equipos.filter(e=>e.etapas.every(x=>!x)).length;
+  const completados=eqA.filter(e=>e.etapas.every(Boolean)).length;
+  const sinIniciar=eqA.filter(e=>e.etapas.every(x=>!x)).length;
   const enProceso=N-completados-sinIniciar;
   // etapas
-  const stageCount=INSTALL_STAGES.map((_,i)=>state.equipos.filter(e=>e.etapas[i]).length);
+  const stageCount=INSTALL_STAGES.map((_,i)=>eqA.filter(e=>e.etapas[i]).length);
   // por sector
-  const secRows=[];bySector().forEach((items,sector)=>{const t=items.length*INSTALL_STAGES.length;const d=items.reduce((a,e)=>a+e.etapas.filter(Boolean).length,0);secRows.push({nm:sector,pct:t?Math.round(d/t*100):0});});
+  const secRows=[];bySector().forEach((items0,sector)=>{const items=items0.filter(e=>!e.devolucion);if(!items.length)return;const t=items.length*INSTALL_STAGES.length;const d=items.reduce((a,e)=>a+e.etapas.filter(Boolean).length,0);secRows.push({nm:sector,pct:t?Math.round(d/t*100):0});});
   // QA
-  let qd=0,qt=0;state.equipos.forEach(e=>{const p=qaProgress(e);qd+=p.done;qt+=p.total;});
+  let qd=0,qt=0;eqA.forEach(e=>{const p=qaProgress(e);qd+=p.done;qt+=p.total;});
   const qaPct=qt?Math.round(qd/qt*100):0;
   // QC
   let pts=0,maxAll=0,nc=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;q.evals.forEach(v=>{if(v==='NC')nc++;});});
   const conf=maxAll?Math.round(pts/maxAll*100):0;
   // evidencia
-  const conFoto=state.equipos.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
+  const conFoto=eqA.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
   const evPct=Math.round(conFoto/N*100);
   // dias
   const ini=state.proyecto.inicio,fin=state.proyecto.termino;let dias=0;if(ini&&fin){dias=Math.round((new Date(fin)-new Date(ini))/86400000)+1;if(dias<0)dias=0;}
@@ -1799,10 +1804,11 @@ async function generarInforme(){
   await new Promise(r=>setTimeout(r,20)); // deja que el botón pinte el estado "Generando…" antes del trabajo pesado
   try{
     pullProyecto();state.cierreObs=document.getElementById('cierreObs').value;const p=state.proyecto;
-    const tot=state.equipos.length;
-    let done=0,tt=0;state.equipos.forEach(e=>{tt+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
-    const av=tt?Math.round(done/tt*100):0;const cabReady=state.equipos.filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
-    const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
+    const eqA=equiposActivos();
+    const tot=eqA.length;
+    let done=0,tt=0;eqA.forEach(e=>{tt+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
+    const av=tt?Math.round(done/tt*100):0;const cabReady=eqA.filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
+    const listos=eqA.filter(e=>e.etapas.every(Boolean)).length;
     let pts=0,maxAll=0,nc=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;q.evals.forEach(v=>{if(v==='NC')nc++;});});
     const conf=maxAll?Math.round(pts/maxAll*100):0;
     const ini=p.inicio,fin=p.termino;let dias=0;if(ini&&fin){dias=Math.round((new Date(fin)-new Date(ini))/86400000)+1;if(dias<0)dias=0;}
@@ -1810,12 +1816,12 @@ async function generarInforme(){
     const stB=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">C</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">PC</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">NC</span>':'<span style="color:#aaa">—</span>';
     const nCols=INSTALL_STAGES.length+2;
     const _eqDisp={};dispNames(state.equipos).forEach(x=>_eqDisp[x.e.id]=x.disp);
-    let eqRows='';bySector().forEach((items,sector)=>{eqRows+=`<tr class="sec-row"><td colspan="${nCols}">${esc(sector)}</td></tr>`;items.forEach(e=>{eqRows+=`<tr><td>${esc(_eqDisp[e.id]||e.nombre)}</td>${e.etapas.map(s=>`<td class="center">${s?'✓':'—'}</td>`).join('')}<td class="center">${Math.round(e.etapas.filter(Boolean).length/INSTALL_STAGES.length*100)}%</td></tr>`;});});
+    let eqRows='';bySector().forEach((items0,sector)=>{const items=items0.filter(e=>!e.devolucion);if(!items.length)return;eqRows+=`<tr class="sec-row"><td colspan="${nCols}">${esc(sector)}</td></tr>`;items.forEach(e=>{eqRows+=`<tr><td>${esc(_eqDisp[e.id]||e.nombre)}</td>${e.etapas.map(s=>`<td class="center">${s?'✓':'—'}</td>`).join('')}<td class="center">${Math.round(e.etapas.filter(Boolean).length/INSTALL_STAGES.length*100)}%</td></tr>`;});});
     const stWord=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">Conforme</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">Observación</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">No conforme</span>':'<span style="color:#aaa">Pendiente</span>';
     let qcRows=QC_DEFS.map(d=>{const q=state.qc[d.code]||{evals:[null]};return `<tr><td>${d.code}</td><td>${d.name}</td><td>${esc((state.qc[d.code]||{}).resp||'—')}</td><td class="center">${stWord(q.evals[0])}</td></tr>`;}).join('');
     const ncList=QC_DEFS.map(d=>({d,o:(state.qc[d.code]||{}).obs})).filter(x=>x.o);
     let obsHtml=ncList.length?('<ul style="margin:0;padding-left:18px;font-size:12px">'+ncList.map(x=>`<li><b>${x.d.code}:</b> ${esc(x.o)}</li>`).join('')+'</ul>'):'<p class="small">Sin observaciones registradas.</p>';
-    const fotosOrd=[...state.equipos.map(e=>{const f=state.fotos.find(x=>x.equipoId===e.id);return f?{f,cap:e.sector+' · '+(_eqDisp[e.id]||e.nombre)}:null;}).filter(Boolean),...state.fotos.filter(f=>f.cat==='electrico').map(f=>({f,cap:'Circuito eléctrico'})),...state.fotos.filter(f=>f.cat==='internet').map(f=>({f,cap:'Internet / conectividad'})),...state.fotos.filter(f=>f.cat==='otros').map(f=>({f,cap:'Otros'}))];
+    const fotosOrd=[...eqA.map(e=>{const f=state.fotos.find(x=>x.equipoId===e.id);return f?{f,cap:e.sector+' · '+(_eqDisp[e.id]||e.nombre)}:null;}).filter(Boolean),...state.fotos.filter(f=>f.cat==='electrico').map(f=>({f,cap:'Circuito eléctrico'})),...state.fotos.filter(f=>f.cat==='internet').map(f=>({f,cap:'Internet / conectividad'})),...state.fotos.filter(f=>f.cat==='otros').map(f=>({f,cap:'Otros'}))];
     // Miniaturas livianas SOLO para este informe (no se guardan): en el PDF cada foto
     // mide ~120px de alto, así que no tiene sentido incrustar la versión de 1280px guardada.
     // Esto es lo que hacía lento el botón "Informe", sobre todo en el teléfono.
@@ -1873,7 +1879,7 @@ function dispNames(list){
     const b=baseSinNumero(e.nombre);const f=flujoDe(e);const nm=b+(f?' '+f:'');const k=(e.sector||'')+'|'+b+'|'+f;let d=nm;if(cnt[k]>1){seen[k]=(seen[k]||0)+1;d=nm+' '+seen[k];}return{e,disp:d};
   });
 }
-function actaList(){return state.equipos.filter(e=>!ACTA_EXCL.test(e.nombre||'')&&!esPilar(e));}
+function actaList(){return state.equipos.filter(e=>!e.devolucion&&!ACTA_EXCL.test(e.nombre||'')&&!esPilar(e));}
 function actaRows(){return dispNames(actaList());}
 function setActaFlujo(id,v){const e=state.equipos.find(x=>x.id===id);if(!e)return;actaOf(e).flujo=v;renderActaEditor();dirty();}
 function actaOf(e){if(!e.acta)e.acta={inst:!!e.etapas[1],oper:!!e.etapas[3],prue:!!e.etapas[4],coment:e.comentario||''};return e.acta;}
@@ -2001,7 +2007,7 @@ function generarActa(){
   if(!win){alert('El navegador bloqueó la ventana nueva. Permite las ventanas emergentes para este sitio e inténtalo de nuevo.');}
 }
 function getStats(){
-  const eq=state.equipos,tot=eq.length;let done=0,total=0;eq.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
+  const eq=equiposActivos(),tot=eq.length;let done=0,total=0;eq.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
   const avance=total?Math.round(done/total*100):0;
   const cab=eq.filter(e=>e.etapas[0]).length,cabPct=tot?Math.round(cab/tot*100):0;
   let pts=0,maxAll=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;pts+=qcScore(q).pts;});
@@ -2180,7 +2186,7 @@ function projId(){
 }
 function buildSnapshot(){
   const st=getStats(),sc=scheduleCalc(),p=state.proyecto;
-  const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
+  const listos=equiposActivos().filter(e=>e.etapas.every(Boolean)).length;
   const dh=state.tecnicos.reduce((a,t)=>a+(t.dias||0),0);
   const MS=86400000;
   const dd=(a,b)=>(a&&b)?Math.round((new Date(b+'T00:00')-new Date(a+'T00:00'))/MS):null;
@@ -2189,7 +2195,7 @@ function buildSnapshot(){
   const diasPlan=dd(p.inicio,p.termino);
   const diasReales=finalizado?dd(p.inicio,fechaCierre):null;
   const desvioDias=(diasPlan!=null&&diasReales!=null)?(diasReales-diasPlan):null;
-  const nEq=state.equipos.length;
+  const nEq=equiposActivos().length;
   return{
     id:projId(), pid:(state.proyecto.pid||'').trim(), nombre:p.nombre||document.getElementById('p_nombre').value||'(sin nombre)',
     direccion:p.direccion||document.getElementById('p_direccion').value||'', comuna:p.comuna||'',
