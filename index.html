@@ -331,7 +331,12 @@
     </div>
     <div class="grid c2">
       <div><label>Nombre del proyecto</label><input id="p_nombre" oninput="dirty()"></div>
-      <div><label>ID de proyecto <span class="auto-fill">clave única en el Panel</span></label><input id="p_pid" placeholder="Ej: EBOSA-MATTA-2026" oninput="dirty()"><div class="small" style="margin-top:3px">Mantén el mismo ID entre días para actualizar el mismo proyecto (no crear uno nuevo).</div></div>
+      <div><label>ID de proyecto <span class="auto-fill">N° de servidor</span></label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="p_pid" placeholder="Ej: 415" oninput="dirty();_pidChequeado=''" onchange="verificarPidExistente()" style="flex:1">
+          <div style="flex:0 0 120px"><input id="p_upgrade" type="number" min="0" step="1" placeholder="Upgrade N°" title="0 o vacío = proyecto original" oninput="dirty()"></div>
+        </div>
+        <div class="small" id="pidAviso" style="margin-top:3px">Si el N° de servidor ya existe, la app te avisará y lo registrará como Upgrade 1, 2, 3…</div></div>
       <div><label>Dirección <span class="auto-fill">del JSON</span></label><input id="p_direccion" oninput="dirty()"></div>
       <div><label>Ejecutivo comercial <span class="auto-fill">del JSON</span></label><input id="p_ejecutivo" oninput="dirty()"></div>
       <div><label>Estado general</label><select id="p_estadosel" onchange="dirty();renderEstado()"><option>Sin iniciar</option><option>En ejecución</option><option>En revisión QC</option><option>Finalizado</option></select></div>
@@ -348,6 +353,26 @@
         <select id="p_tecsel" onchange="addTecAsg(this.value)"><option value="">Agregar técnico…</option></select>
         <div id="tecAsgTags" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px"></div>
       </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title-bar"><h2>📞 Contactos</h2></div>
+    <p class="hint">Se traen automáticamente del Detalle de Proyecto si vienen cargados ahí. Si no, complétalos aquí manualmente.</p>
+    <div class="grid c3" style="margin-bottom:14px">
+      <div><label>Contacto Administración <span class="auto-fill">del JSON</span></label><input id="p_ca_n" placeholder="Nombre" oninput="dirty()"></div>
+      <div><label>&nbsp;</label><input id="p_ca_t" placeholder="Teléfono" oninput="dirty()"></div>
+      <div><label>&nbsp;</label><input id="p_ca_e" placeholder="Email" oninput="dirty()"></div>
+    </div>
+    <div class="grid c3" style="margin-bottom:14px">
+      <div><label>Contacto Instalación <span class="auto-fill">del JSON</span></label><input id="p_ci_n" placeholder="Nombre" oninput="dirty()"></div>
+      <div><label>&nbsp;</label><input id="p_ci_t" placeholder="Teléfono" oninput="dirty()"></div>
+      <div><label>&nbsp;</label><input id="p_ci_e" placeholder="Email" oninput="dirty()"></div>
+    </div>
+    <div class="grid c3">
+      <div><label>Contacto Comercial <span class="auto-fill">del JSON</span></label><input id="p_cc_n" placeholder="Nombre" oninput="dirty()"></div>
+      <div><label>&nbsp;</label><input id="p_cc_t" placeholder="Teléfono" oninput="dirty()"></div>
+      <div><label>&nbsp;</label><input id="p_cc_e" placeholder="Email" oninput="dirty()"></div>
     </div>
   </div>
 
@@ -679,7 +704,8 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
 }));
 
 /* PROYECTO */
-const PF={p_nombre:'nombre',p_pid:'pid',p_direccion:'direccion',p_ejecutivo:'ejecutivo',p_inicio:'inicio',p_termino:'termino',p_limite:'limite'};
+const PF={p_nombre:'nombre',p_pid:'pid',p_upgrade:'upgrade',p_direccion:'direccion',p_ejecutivo:'ejecutivo',p_inicio:'inicio',p_termino:'termino',p_limite:'limite',
+  p_ca_n:'ca_n',p_ca_t:'ca_t',p_ca_e:'ca_e', p_ci_n:'ci_n',p_ci_t:'ci_t',p_ci_e:'ci_e', p_cc_n:'cc_n',p_cc_t:'cc_t',p_cc_e:'cc_e'};
 function pullProyecto(){for(const[el,k]of Object.entries(PF))state.proyecto[k]=document.getElementById(el).value;state.proyecto.estado=document.getElementById('p_estadosel').value;state.proyecto.jefe=document.getElementById('p_jefe').value;}
 function pushProyecto(){for(const[el,k]of Object.entries(PF))document.getElementById(el).value=state.proyecto[k]||'';document.getElementById('p_estadosel').value=state.proyecto.estado||'Sin iniciar';document.getElementById('p_jefe').value=state.proyecto.jefe||'';renderEstado();renderTecAsg();}
 const TECNICOS=['Pedro Rivera','Matías Silva','Sebastián Espinoza','Ciro Forte','Ariel Lazo','Jhon Villegas'];
@@ -808,6 +834,13 @@ function parseDetalle(data,fname){
   // Ejecutivo comercial
   const eje=F.p_ej||guess(['p_ej','ejecutivocomercial','ejecutivo','vendedor','comercial']);
   if(eje&&/[a-záéíóúñ]/i.test(String(eje)))document.getElementById('p_ejecutivo').value=eje;
+  // Contactos (Administración / Instalación / Comercial): mismos campos que usa DP-Safecard
+  [['p_ca_n','ca_n'],['p_ca_t','ca_t'],['p_ca_e','ca_e'],
+   ['p_ci_n','ci_n'],['p_ci_t','ci_t'],['p_ci_e','ci_e'],
+   ['p_cc_n','cc_n'],['p_cc_t','cc_t'],['p_cc_e','cc_e']].forEach(([elId,key])=>{
+    const v=F[key];
+    if(v&&String(v).trim()!=='')document.getElementById(elId).value=String(v).trim();
+  });
   // Plan técnico (para sugerir insumos con datos reales)
   state.techPlan={utp:toNum(F.t_utp),fibra:toNum(F.t_fibra),emt:toNum(F.t_emt),pvc:toNum(F.t_pvc)};
   // Plazo estipulado y fechas tentativas para el cronograma
@@ -835,6 +868,7 @@ function parseDetalle(data,fname){
   document.getElementById('importPreview').style.display='block';
   document.getElementById('cargaInfo').textContent=`✓ "${fname}" leído.`;
   pushProyecto();dirty();
+  verificarPidExistente();
 }
 function toggleImpAll(cb){document.querySelectorAll('.impChk').forEach(c=>c.checked=cb.checked);}
 function confirmarImport(){
@@ -899,8 +933,6 @@ function duplicarEquipo(id){
   state.equipos.splice(idx+1,0,copia);
   renderEquipos();renderFotos();dirty();
 }
-// Equipos que cuentan para avance, informe y acta: los marcados con devolución a bodega quedan fuera.
-function equiposActivos(){return state.equipos.filter(e=>!e.devolucion);}
 function bySector(){const m=new Map();state.equipos.forEach(e=>{const s=e.sector||'General';if(!m.has(s))m.set(s,[]);m.get(s).push(e);});return m;}
 let _EQNM={};
 let qaUnitOpen=new Set();
@@ -911,12 +943,11 @@ function renderEquipos(){
   _EQNM={};dispNames(state.equipos).forEach(x=>_EQNM[x.e.id]=x.disp);
   renderDevolucionLista();
   bySector().forEach((items,sector)=>{
-    const itemsAct=items.filter(e=>!e.devolucion),nDev=items.length-itemsAct.length;
-    const total=itemsAct.length*INSTALL_STAGES.length;
-    const done=itemsAct.reduce((a,e)=>a+e.etapas.filter(Boolean).length,0);
+    const total=items.length*INSTALL_STAGES.length;
+    const done=items.reduce((a,e)=>a+e.etapas.filter(Boolean).length,0);
     const secPct=total?Math.round(done/total*100):0;
     const h=document.createElement('div');h.className='sector-head';
-    h.innerHTML=`<span class="nm">${esc(sector)}</span><span class="badge">${itemsAct.length} equipo(s)${nDev?` · ${nDev} devuelto(s)`:''} · ${secPct}%</span>
+    h.innerHTML=`<span class="nm">${esc(sector)}</span><span class="badge">${items.length} equipo(s) · ${secPct}%</span>
       <div class="eq-mini" style="width:120px;margin-top:0"><span style="width:${secPct}%;background:var(--or)"></span></div>`;
     c.appendChild(h);
     items.forEach(e=>{
@@ -998,7 +1029,7 @@ function setUnit(id,f,v){const e=state.equipos.find(x=>x.id===id);if(!e)return;e
 function toggleStage(id,i){const e=state.equipos.find(x=>x.id===id);e.etapas[i]=!e.etapas[i];renderEquipos();recalc();dirty();}
 function markPrev(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;const all=e.etapas.slice(0,4).every(Boolean);for(let i=0;i<4;i++)e.etapas[i]=!all;renderEquipos();recalc();dirty();}
 function toggleTerreno(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.enTerreno=!e.enTerreno;if(e.enTerreno&&!e.fechaTerreno)e.fechaTerreno=hoyISO();renderEquipos();dirty();}
-function toggleDevolucion(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.devolucion=!e.devolucion;renderEquipos();renderDevolucionLista();renderFotos();try{recalc();}catch(err){}dirty();}
+function toggleDevolucion(id){const e=state.equipos.find(x=>x.id===id);if(!e)return;e.devolucion=!e.devolucion;renderEquipos();renderDevolucionLista();dirty();}
 function renderDevolucionLista(){
   const cont=document.getElementById('devolucionLista'),btn=document.getElementById('btnDevolucion');
   if(!cont)return;
@@ -1018,15 +1049,14 @@ async function realizarDevolucion(){
   if(!window.DEVOLUCION_ENDPOINT||/PEGA_AQUI/.test(window.DEVOLUCION_ENDPOINT)){alert('Falta configurar el endpoint de devolución (window.DEVOLUCION_ENDPOINT) en este archivo.');return;}
   if(!confirm('¿Enviar correo de devolución con '+marcados.length+' equipo(s)?'))return;
   const disp={};dispNames(state.equipos).forEach(x=>disp[x.e.id]=x.disp);
-  const ses=sesion()||{};
-  const payload={proyecto:state.proyecto.nombre||'',responsable:state.proyecto.jefe||'',tecnico:ses.nombre||'',correoTecnico:ses.email||'',equipos:marcados.map(e=>({nombre:disp[e.id]||e.nombre,ip:e.ip||'',sector:e.sector||''}))};
+  const payload={proyecto:state.proyecto.nombre||'',responsable:state.proyecto.jefe||'',equipos:marcados.map(e=>({nombre:disp[e.id]||e.nombre,ip:e.ip||'',sector:e.sector||''}))};
   const status=document.getElementById('devolucionStatus');
   status.textContent='Enviando…';status.style.color='var(--muted)';
   try{
     const res=await fetch(window.DEVOLUCION_ENDPOINT,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
     const data=await res.json();
     if(data&&data.ok){
-      status.textContent='✅ Correo de devolución enviado ('+data.enviados+' equipo(s)) a: '+((data.destinatarios||[]).join(', ')||'bodega')+'.';status.style.color='var(--green)';
+      status.textContent='✅ Correo de devolución enviado ('+data.enviados+' equipo(s)).';status.style.color='var(--green)';
     }else{
       status.textContent='⚠ '+((data&&data.error)||'No se pudo enviar.');status.style.color='var(--nc)';
     }
@@ -1074,13 +1104,11 @@ function setQC(code,f,v){state.qc[code][f]=v;recalc();dirty();}
 /* FOTOS */
 let _evTarget=null,_multiTarget=null;
 function renderFotos(){
-  document.getElementById('evEmpty').style.display=equiposActivos().length?'none':'block';
-  const conPhoto=equiposActivos().filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
-  document.getElementById('evContador').textContent=`Evidencia: ${conPhoto}/${equiposActivos().length} equipos con foto. Las imágenes se comprimen automáticamente.`;
+  document.getElementById('evEmpty').style.display=state.equipos.length?'none':'block';
+  const conPhoto=state.equipos.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
+  document.getElementById('evContador').textContent=`Evidencia: ${conPhoto}/${state.equipos.length} equipos con foto. Las imágenes se comprimen automáticamente.`;
   const cont=document.getElementById('evGroups');cont.innerHTML='';
-  bySector().forEach((items0,sector)=>{
-    const items=items0.filter(e=>!e.devolucion); // los equipos con devolución a bodega no llevan foto
-    if(!items.length)return;
+  bySector().forEach((items,sector)=>{
     const h=document.createElement('div');h.className='sector-head';
     const ok=items.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
     h.innerHTML=`<span class="nm">${esc(sector)}</span><span class="badge">${ok}/${items.length} con foto</span>`;
@@ -1103,93 +1131,9 @@ function renderFotos(){
 }
 function pedirEvidencia(id){_evTarget=id;document.getElementById('fileEvidencia').click();}
 function pedirMulti(cat){_multiTarget=cat;document.getElementById('fileMulti').click();}
-document.getElementById('fileEvidencia').addEventListener('change',e=>{const f=soloFotos_(e.target.files)[0];if(!f||!_evTarget)return;if(driveConfigOk()&&!_gtokenUpload)ensureDriveUploadToken(()=>{},()=>{});resizeImg(f,data=>{state.fotos=state.fotos.filter(x=>x.equipoId!==_evTarget);const eq=state.equipos.find(x=>x.id===_evTarget);state.fotos.push({id:uid(),cat:'equipo',equipoId:_evTarget,desc:eq?eq.nombre:'',data});renderFotos();dirty();});e.target.value='';});
-document.getElementById('fileMulti').addEventListener('change',e=>{if(driveConfigOk()&&!_gtokenUpload)ensureDriveUploadToken(()=>{},()=>{});soloFotos_(e.target.files).forEach(f=>resizeImg(f,data=>{state.fotos.push({id:uid(),cat:_multiTarget,equipoId:null,desc:'',data});renderFotos();dirty();}));e.target.value='';});
-function esHeicFile_(f){return /heic|heif/i.test(f.type||'')||/\.(heic|heif)$/i.test(f.name||'');}
-function esFotoFile_(f){return /^image\//i.test(f.type||'')||esHeicFile_(f)||(!f.type&&/\.(jpe?g|png|webp|gif|bmp)$/i.test(f.name||''));}
-
-// La librería de conversión HEIC (pesa ~3 MB) se descarga solo la primera vez que hace falta.
-let _heicToPromise=null;
-function cargarHeicTo_(){
-  if(typeof HeicTo==='function') return Promise.resolve();
-  if(!_heicToPromise){
-    _heicToPromise=new Promise((res,rej)=>{
-      const s=document.createElement('script');
-      s.src='https://cdn.jsdelivr.net/npm/heic-to@1.5.2/dist/iife/heic-to.js';
-      s.onload=res;
-      s.onerror=()=>{_heicToPromise=null;rej(new Error('No cargó la librería HEIC'));};
-      document.head.appendChild(s);
-    });
-  }
-  return _heicToPromise;
-}
-// Intenta convertir HEIC → JPG: 1) librería nueva, 2) librería anterior, 3) el original
-// (Safari sí sabe leer HEIC por sí solo).
-async function convertirHeic_(file){
-  try{
-    await cargarHeicTo_();
-    if(typeof HeicTo==='function') return await HeicTo({blob:file,type:'image/jpeg',quality:0.85});
-  }catch(e){ console.warn('heic-to falló:',e); }
-  try{
-    if(typeof heic2any==='function'){
-      const out=await heic2any({blob:file,toType:'image/jpeg',quality:0.85});
-      return out instanceof Blob?out:out[0];
-    }
-  }catch(e){ console.warn('heic2any falló:',e); }
-  return file;
-}
-function dibujarYComprimir_(blob){
-  return new Promise((res,rej)=>{
-    const url=URL.createObjectURL(blob); // evita crear un base64 gigante de la foto original
-    const img=new Image();
-    img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('imagen'));};
-    img.onload=()=>{
-      try{
-        const max=1280;let w=img.width,h=img.height;
-        if(w>max||h>max){const s=Math.min(max/w,max/h);w=Math.round(w*s);h=Math.round(h*s);}
-        const cv=document.createElement('canvas');cv.width=w;cv.height=h;
-        cv.getContext('2d').drawImage(img,0,0,w,h);
-        const out=cv.toDataURL('image/jpeg',0.72);
-        URL.revokeObjectURL(url);res(out);
-      }catch(e){URL.revokeObjectURL(url);rej(e);}
-    };
-    img.src=url;
-  });
-}
-// Las fotos se procesan UNA A LA VEZ (en cola): convertir 18 fotos HEIC al mismo tiempo
-// agota la memoria del navegador y hace que fallen varias.
-let _colaFotos=Promise.resolve(),_fotosTotal=0,_fotosHechas=0,_fotosFallidas=[];
-function progresoFotos_(){
-  let el=document.getElementById('fotoProgreso');
-  if(_fotosTotal===0||_fotosHechas>=_fotosTotal){ if(el)el.remove(); return; }
-  if(!el){
-    el=document.createElement('div');el.id='fotoProgreso';
-    el.style.cssText='position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#1F2933;color:#fff;padding:10px 18px;border-radius:999px;font-size:13px;font-weight:700;z-index:99999;box-shadow:0 4px 14px rgba(0,0,0,.3)';
-    document.body.appendChild(el);
-  }
-  el.textContent='📷 Procesando fotos… '+(_fotosHechas+1)+' de '+_fotosTotal;
-}
-function resizeImg(file,cb){
-  _fotosTotal++;progresoFotos_();
-  _colaFotos=_colaFotos.then(async()=>{
-    try{
-      const src=esHeicFile_(file)?await convertirHeic_(file):file;
-      cb(await dibujarYComprimir_(src));
-    }catch(e){ console.warn('Foto no leída:',file&&file.name,e); _fotosFallidas.push((file&&file.name)||'foto'); }
-  }).then(()=>{
-    _fotosHechas++;
-    if(_fotosHechas>=_fotosTotal){
-      const fallidas=_fotosFallidas.slice();_fotosTotal=0;_fotosHechas=0;_fotosFallidas=[];
-      progresoFotos_();
-      if(fallidas.length) alert('⚠️ No se pudieron leer '+fallidas.length+' foto(s):\n\n'+fallidas.slice(0,10).join('\n')+(fallidas.length>10?'\n…':'')+'\n\nIntenta subirlas de nuevo, o conviértelas a JPG.');
-    } else progresoFotos_();
-  });
-}
-function soloFotos_(files){
-  const todos=[...files],fotos=todos.filter(esFotoFile_),omitidas=todos.length-fotos.length;
-  if(omitidas) setTimeout(()=>alert(omitidas+' archivo(s) no son fotos (por ejemplo videos .MOV) y se omitieron.'),0);
-  return fotos;
-}
+document.getElementById('fileEvidencia').addEventListener('change',e=>{const f=e.target.files[0];if(!f||!_evTarget)return;if(driveConfigOk()&&!_gtokenUpload)ensureDriveUploadToken(()=>{},()=>{});resizeImg(f,data=>{state.fotos=state.fotos.filter(x=>x.equipoId!==_evTarget);const eq=state.equipos.find(x=>x.id===_evTarget);state.fotos.push({id:uid(),cat:'equipo',equipoId:_evTarget,desc:eq?eq.nombre:'',data});renderFotos();dirty();});e.target.value='';});
+document.getElementById('fileMulti').addEventListener('change',e=>{if(driveConfigOk()&&!_gtokenUpload)ensureDriveUploadToken(()=>{},()=>{});[...e.target.files].forEach(f=>resizeImg(f,data=>{state.fotos.push({id:uid(),cat:_multiTarget,equipoId:null,desc:'',data});renderFotos();dirty();}));e.target.value='';});
+function resizeImg(file,cb){const r=new FileReader();r.onload=()=>{const img=new Image();img.onload=()=>{const max=1280;let w=img.width,h=img.height;if(w>max||h>max){const s=Math.min(max/w,max/h);w=Math.round(w*s);h=Math.round(h*s);}const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);cb(cv.toDataURL('image/jpeg',0.72));};img.src=r.result;};r.readAsDataURL(file);}
 function delFoto(id){state.fotos=state.fotos.filter(f=>f.id!==id);renderFotos();dirty();}
 
 /* CIERRE */
@@ -1226,11 +1170,10 @@ function sugerirInsumos(){generarMateriales();}
 /* RECALC */
 function recalc(){
   pullProyecto();
-  const eqA=equiposActivos();
-  let done=0,total=0;eqA.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
-  const av=total?Math.round(done/total*100):0;const tot=eqA.length;
-  const cabReady=eqA.filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
-  const listos=eqA.filter(e=>e.etapas.every(Boolean)).length;
+  let done=0,total=0;state.equipos.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
+  const av=total?Math.round(done/total*100):0;const tot=state.equipos.length;
+  const cabReady=state.equipos.filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
+  const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
   setText('kEquipos',tot);setText('kCab',cabPct+'%');setText('kListos',listos+'/'+tot);setText('kAvance',av+'%');setText('pillAvanceGlobal',av+'%');document.getElementById('barAvance').style.width=av+'%';
   let pts=0,maxAll=0,nc=0,ev=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;if(s.max>0)ev++;q.evals.forEach(v=>{if(v==='NC')nc++;});});
   const conf=maxAll?Math.round(pts/maxAll*100):0;setText('qcPuntaje',pts+' / '+maxAll);setText('qcConf',conf+'%');setText('qcNC',nc);setText('qcEval',ev+'/'+QC_DEFS.length);setText('pillQC',conf+'%');document.getElementById('barQC').style.width=conf+'%';
@@ -1255,28 +1198,28 @@ function barsHtml(rows,green){
 }
 function renderDashboard(){
   const dash=document.getElementById('dashboard');const card=document.getElementById('dashCard');if(!dash)return;
-  const eqA=equiposActivos();const N=eqA.length;
+  const N=state.equipos.length;
   if(N===0){card.style.display='none';return;}
   card.style.display='block';
   document.getElementById('dashEstado').textContent=state.proyecto.estado||'Sin iniciar';
   // avance
-  let done=0,total=0;eqA.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
+  let done=0,total=0;state.equipos.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
   const av=total?Math.round(done/total*100):0;
-  const completados=eqA.filter(e=>e.etapas.every(Boolean)).length;
-  const sinIniciar=eqA.filter(e=>e.etapas.every(x=>!x)).length;
+  const completados=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
+  const sinIniciar=state.equipos.filter(e=>e.etapas.every(x=>!x)).length;
   const enProceso=N-completados-sinIniciar;
   // etapas
-  const stageCount=INSTALL_STAGES.map((_,i)=>eqA.filter(e=>e.etapas[i]).length);
+  const stageCount=INSTALL_STAGES.map((_,i)=>state.equipos.filter(e=>e.etapas[i]).length);
   // por sector
-  const secRows=[];bySector().forEach((items0,sector)=>{const items=items0.filter(e=>!e.devolucion);if(!items.length)return;const t=items.length*INSTALL_STAGES.length;const d=items.reduce((a,e)=>a+e.etapas.filter(Boolean).length,0);secRows.push({nm:sector,pct:t?Math.round(d/t*100):0});});
+  const secRows=[];bySector().forEach((items,sector)=>{const t=items.length*INSTALL_STAGES.length;const d=items.reduce((a,e)=>a+e.etapas.filter(Boolean).length,0);secRows.push({nm:sector,pct:t?Math.round(d/t*100):0});});
   // QA
-  let qd=0,qt=0;eqA.forEach(e=>{const p=qaProgress(e);qd+=p.done;qt+=p.total;});
+  let qd=0,qt=0;state.equipos.forEach(e=>{const p=qaProgress(e);qd+=p.done;qt+=p.total;});
   const qaPct=qt?Math.round(qd/qt*100):0;
   // QC
   let pts=0,maxAll=0,nc=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;q.evals.forEach(v=>{if(v==='NC')nc++;});});
   const conf=maxAll?Math.round(pts/maxAll*100):0;
   // evidencia
-  const conFoto=eqA.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
+  const conFoto=state.equipos.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
   const evPct=Math.round(conFoto/N*100);
   // dias
   const ini=state.proyecto.inicio,fin=state.proyecto.termino;let dias=0;if(ini&&fin){dias=Math.round((new Date(fin)-new Date(ini))/86400000)+1;if(dias<0)dias=0;}
@@ -1341,8 +1284,7 @@ async function guardarNube(silent){
   // link ahí — la foto completa queda en Drive, y solo se guarda una miniatura muy
   // liviana en la nube (Firestore) para que la app se mantenga rápida. Una foto ya
   // subida antes no se vuelve a subir.
-  const _idsDev=new Set(state.equipos.filter(e=>e.devolucion).map(e=>e.id));
-  const pendientes=(state.fotos||[]).filter(f=>f.data && !f.driveUrl && !_idsDev.has(f.equipoId));
+  const pendientes=(state.fotos||[]).filter(f=>f.data && !f.driveUrl);
   let fotosSubidas=0, fotosFallidas=0, _ultimoErrorFotoDrive='';
   // En un guardado SILENCIOSO (automático tras registrar un avance) y sin haber
   // autorizado Drive todavía en esta sesión, el navegador casi siempre bloquea el
@@ -1807,11 +1749,10 @@ async function generarInforme(){
   await new Promise(r=>setTimeout(r,20)); // deja que el botón pinte el estado "Generando…" antes del trabajo pesado
   try{
     pullProyecto();state.cierreObs=document.getElementById('cierreObs').value;const p=state.proyecto;
-    const eqA=equiposActivos();
-    const tot=eqA.length;
-    let done=0,tt=0;eqA.forEach(e=>{tt+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
-    const av=tt?Math.round(done/tt*100):0;const cabReady=eqA.filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
-    const listos=eqA.filter(e=>e.etapas.every(Boolean)).length;
+    const tot=state.equipos.length;
+    let done=0,tt=0;state.equipos.forEach(e=>{tt+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
+    const av=tt?Math.round(done/tt*100):0;const cabReady=state.equipos.filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
+    const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
     let pts=0,maxAll=0,nc=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;q.evals.forEach(v=>{if(v==='NC')nc++;});});
     const conf=maxAll?Math.round(pts/maxAll*100):0;
     const ini=p.inicio,fin=p.termino;let dias=0;if(ini&&fin){dias=Math.round((new Date(fin)-new Date(ini))/86400000)+1;if(dias<0)dias=0;}
@@ -1819,12 +1760,12 @@ async function generarInforme(){
     const stB=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">C</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">PC</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">NC</span>':'<span style="color:#aaa">—</span>';
     const nCols=INSTALL_STAGES.length+2;
     const _eqDisp={};dispNames(state.equipos).forEach(x=>_eqDisp[x.e.id]=x.disp);
-    let eqRows='';bySector().forEach((items0,sector)=>{const items=items0.filter(e=>!e.devolucion);if(!items.length)return;eqRows+=`<tr class="sec-row"><td colspan="${nCols}">${esc(sector)}</td></tr>`;items.forEach(e=>{eqRows+=`<tr><td>${esc(_eqDisp[e.id]||e.nombre)}</td>${e.etapas.map(s=>`<td class="center">${s?'✓':'—'}</td>`).join('')}<td class="center">${Math.round(e.etapas.filter(Boolean).length/INSTALL_STAGES.length*100)}%</td></tr>`;});});
+    let eqRows='';bySector().forEach((items,sector)=>{eqRows+=`<tr class="sec-row"><td colspan="${nCols}">${esc(sector)}</td></tr>`;items.forEach(e=>{eqRows+=`<tr><td>${esc(_eqDisp[e.id]||e.nombre)}</td>${e.etapas.map(s=>`<td class="center">${s?'✓':'—'}</td>`).join('')}<td class="center">${Math.round(e.etapas.filter(Boolean).length/INSTALL_STAGES.length*100)}%</td></tr>`;});});
     const stWord=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">Conforme</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">Observación</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">No conforme</span>':'<span style="color:#aaa">Pendiente</span>';
     let qcRows=QC_DEFS.map(d=>{const q=state.qc[d.code]||{evals:[null]};return `<tr><td>${d.code}</td><td>${d.name}</td><td>${esc((state.qc[d.code]||{}).resp||'—')}</td><td class="center">${stWord(q.evals[0])}</td></tr>`;}).join('');
     const ncList=QC_DEFS.map(d=>({d,o:(state.qc[d.code]||{}).obs})).filter(x=>x.o);
     let obsHtml=ncList.length?('<ul style="margin:0;padding-left:18px;font-size:12px">'+ncList.map(x=>`<li><b>${x.d.code}:</b> ${esc(x.o)}</li>`).join('')+'</ul>'):'<p class="small">Sin observaciones registradas.</p>';
-    const fotosOrd=[...eqA.map(e=>{const f=state.fotos.find(x=>x.equipoId===e.id);return f?{f,cap:e.sector+' · '+(_eqDisp[e.id]||e.nombre)}:null;}).filter(Boolean),...state.fotos.filter(f=>f.cat==='electrico').map(f=>({f,cap:'Circuito eléctrico'})),...state.fotos.filter(f=>f.cat==='internet').map(f=>({f,cap:'Internet / conectividad'})),...state.fotos.filter(f=>f.cat==='otros').map(f=>({f,cap:'Otros'}))];
+    const fotosOrd=[...state.equipos.map(e=>{const f=state.fotos.find(x=>x.equipoId===e.id);return f?{f,cap:e.sector+' · '+(_eqDisp[e.id]||e.nombre)}:null;}).filter(Boolean),...state.fotos.filter(f=>f.cat==='electrico').map(f=>({f,cap:'Circuito eléctrico'})),...state.fotos.filter(f=>f.cat==='internet').map(f=>({f,cap:'Internet / conectividad'})),...state.fotos.filter(f=>f.cat==='otros').map(f=>({f,cap:'Otros'}))];
     // Miniaturas livianas SOLO para este informe (no se guardan): en el PDF cada foto
     // mide ~120px de alto, así que no tiene sentido incrustar la versión de 1280px guardada.
     // Esto es lo que hacía lento el botón "Informe", sobre todo en el teléfono.
@@ -1882,7 +1823,7 @@ function dispNames(list){
     const b=baseSinNumero(e.nombre);const f=flujoDe(e);const nm=b+(f?' '+f:'');const k=(e.sector||'')+'|'+b+'|'+f;let d=nm;if(cnt[k]>1){seen[k]=(seen[k]||0)+1;d=nm+' '+seen[k];}return{e,disp:d};
   });
 }
-function actaList(){return state.equipos.filter(e=>!e.devolucion&&!ACTA_EXCL.test(e.nombre||'')&&!esPilar(e));}
+function actaList(){return state.equipos.filter(e=>!ACTA_EXCL.test(e.nombre||'')&&!esPilar(e));}
 function actaRows(){return dispNames(actaList());}
 function setActaFlujo(id,v){const e=state.equipos.find(x=>x.id===id);if(!e)return;actaOf(e).flujo=v;renderActaEditor();dirty();}
 function actaOf(e){if(!e.acta)e.acta={inst:!!e.etapas[1],oper:!!e.etapas[3],prue:!!e.etapas[4],coment:e.comentario||''};return e.acta;}
@@ -2010,7 +1951,7 @@ function generarActa(){
   if(!win){alert('El navegador bloqueó la ventana nueva. Permite las ventanas emergentes para este sitio e inténtalo de nuevo.');}
 }
 function getStats(){
-  const eq=equiposActivos(),tot=eq.length;let done=0,total=0;eq.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
+  const eq=state.equipos,tot=eq.length;let done=0,total=0;eq.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
   const avance=total?Math.round(done/total*100):0;
   const cab=eq.filter(e=>e.etapas[0]).length,cabPct=tot?Math.round(cab/tot*100):0;
   let pts=0,maxAll=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;pts+=qcScore(q).pts;});
@@ -2189,7 +2130,7 @@ function projId(){
 }
 function buildSnapshot(){
   const st=getStats(),sc=scheduleCalc(),p=state.proyecto;
-  const listos=equiposActivos().filter(e=>e.etapas.every(Boolean)).length;
+  const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
   const dh=state.tecnicos.reduce((a,t)=>a+(t.dias||0),0);
   const MS=86400000;
   const dd=(a,b)=>(a&&b)?Math.round((new Date(b+'T00:00')-new Date(a+'T00:00'))/MS):null;
@@ -2198,9 +2139,9 @@ function buildSnapshot(){
   const diasPlan=dd(p.inicio,p.termino);
   const diasReales=finalizado?dd(p.inicio,fechaCierre):null;
   const desvioDias=(diasPlan!=null&&diasReales!=null)?(diasReales-diasPlan):null;
-  const nEq=equiposActivos().length;
+  const nEq=state.equipos.length;
   return{
-    id:projId(), pid:(state.proyecto.pid||'').trim(), nombre:p.nombre||document.getElementById('p_nombre').value||'(sin nombre)',
+    id:projId(), pid:(state.proyecto.pid||'').trim(), upgrade:(+state.proyecto.upgrade||0), nombre:p.nombre||document.getElementById('p_nombre').value||'(sin nombre)',
     direccion:p.direccion||document.getElementById('p_direccion').value||'', comuna:p.comuna||'',
     jefe:p.jefe||'', ejecutivo:p.ejecutivo||'',
     inicio:p.inicio||'', termino:p.termino||'', plazo:p.plazo||'', limite:p.limite||'',
@@ -2212,8 +2153,45 @@ function buildSnapshot(){
     diasRest: sc.ok?sc.diasRest:null, diasTrans: sc.ok?sc.diasTrans:null,
     expected: sc.ok?sc.expected:null, gap: sc.ok?sc.gap:null,
     diasPlan, diasReales, desvioDias,
+    ca_n:p.ca_n||'', ca_t:p.ca_t||'', ca_e:p.ca_e||'',
+    ci_n:p.ci_n||'', ci_t:p.ci_t||'', ci_e:p.ci_e||'',
+    cc_n:p.cc_n||'', cc_t:p.cc_t||'', cc_e:p.cc_e||'',
     updatedBy: p.jefe||''
   };
+}
+/* ===== N° de servidor repetido → Upgrade =====
+   Un Upgrade se registra con el MISMO N° de servidor (pid) del proyecto
+   original, pero con su propio número de Upgrade (1, 2, 3…), para que en el
+   Panel aparezcan como tarjetas distintas del mismo servidor. */
+let _pidChequeado='';
+async function verificarPidExistente(){
+  const pid=(document.getElementById('p_pid').value||'').trim();
+  const aviso=document.getElementById('pidAviso');
+  if(!pid||pid===_pidChequeado)return;
+  if(!window.SafecardSync||!window.SafecardSync.enabled||!window.SafecardSync.buscarPorPid)return;
+  let otros=[];
+  try{ otros=(await window.SafecardSync.buscarPorPid(pid)).filter(x=>x.id!==state.proyecto.id); }
+  catch(e){ console.warn('No se pudo verificar el ID:',e); return; }
+  _pidChequeado=pid;
+  const miUp=+document.getElementById('p_upgrade').value||0;
+  if(!otros.length){ if(aviso)aviso.textContent='✓ N° '+pid+' disponible (proyecto original).'; return; }
+  const ups=otros.map(x=>+x.upgrade||0);
+  const lista=otros.slice().sort((a,b)=>(+a.upgrade||0)-(+b.upgrade||0))
+    .map(x=>'• '+((+x.upgrade||0)?'Upgrade '+x.upgrade:'Original')+' — '+(x.nombre||'(sin nombre)')+' ('+(x.estado||'—')+')').join('\n');
+  if(!ups.includes(miUp)){
+    if(aviso)aviso.textContent='ℹ️ N° '+pid+(miUp?(' · Upgrade '+miUp):' · original')+' — hay '+otros.length+' registro(s) más con este N°.';
+    return;
+  }
+  const siguiente=Math.max(...ups)+1;
+  if(confirm('⚠️ El N° de servidor '+pid+' ya existe en el Panel:\n\n'+lista+'\n\n¿Este proyecto es un UPGRADE del mismo servidor?\n\nAceptar → se registrará como "'+pid+' · Upgrade '+siguiente+'".\nCancelar → corrige el N° si es otro proyecto.')){
+    document.getElementById('p_upgrade').value=siguiente;
+    state.proyecto.upgrade=siguiente; dirty();
+    if(aviso)aviso.textContent='✓ Registrado como Upgrade '+siguiente+' del servidor '+pid+'.';
+  }else{
+    _pidChequeado='';
+    if(aviso)aviso.textContent='⚠️ El N° '+pid+' ya está usado. Cámbialo si es un proyecto distinto.';
+    document.getElementById('p_pid').focus();
+  }
 }
 function setSyncStatus(txt,color){const el=document.getElementById('bSyncStatus');if(el){el.textContent=txt;el.style.color=color||'var(--muted)';}}
 function syncAllowed(){return (state.bitacora&&state.bitacora.length>0)||state.proyecto.estado==='Finalizado';}
@@ -2292,7 +2270,15 @@ async function cargarProyectoDesdeURL(){
     const data=await window.SafecardCloud.load(pid);
     const st=estadoDeNube(data);
     if(st){applyLoaded(st);_dirty=false;return true;}
-    alert('Este proyecto aún no tiene un avance guardado en la nube.\nLa cuadrilla debe guardarlo una vez desde la app (☁️ Guardar en la nube o registrar avance).');
+    // No hay un respaldo detallado guardado en 'avances' todavía (nadie usó
+    // "☁️ Guardar en la nube" en este proyecto). Igual seguimos con ESTE
+    // mismo id — nunca uno nuevo al azar — para que lo que se registre en
+    // esta sesión se sume al proyecto que YA existe en el Panel de Control,
+    // en vez de crear un proyecto duplicado y desconectado.
+    applyLoaded({proyecto:{id:pid}});
+    _dirty=false;
+    alert('Este proyecto todavía no tiene un respaldo detallado guardado en la nube, así que no se pudo traer el detalle de equipos/QC ya cargado (nadie usó "☁️ Guardar en la nube" en él antes).\n\nDe todas formas, lo que registres ahora en esta sesión sí va a sumarse correctamente al proyecto en el Panel de Control.\n\nSi necesitas recuperar el detalle anterior, pide a quien lo cargó que presione "☁️ Guardar en la nube" desde su dispositivo, o vuelve a cargar el Detalle de Proyecto.');
+    return true;
   }catch(e){alert('No se pudo abrir el proyecto desde la nube: '+(e.message||e));}
   return false;
 }
@@ -2339,7 +2325,6 @@ window.GOOGLE_API_KEY   = "AIzaSyCyag0lPAOWJTqj0x1Bj-iaOGO3bVXOxnQ";
 /* Correos que PUEDEN editar/actualizar el avance (jefes de cuadrilla + jefe de área). El resto: solo lectura. */
 window.EDITORES = ["nicolas.jara@safecard.cl","fabian.pavez@safecard.cl","francisco.morales@safecard.cl","ignacio.fuentes@safecard.cl","pablo.abarca@safecard.cl"];
 </script>
-<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="https://apis.google.com/js/api.js" async defer></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script type="module">
@@ -2347,7 +2332,7 @@ window.EDITORES = ["nicolas.jara@safecard.cl","fabian.pavez@safecard.cl","franci
   if(FB && FB.apiKey){
     try{
       const {initializeApp}=await import("https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js");
-      const {getFirestore,doc,setDoc,getDoc,getDocs,collection,serverTimestamp}=await import("https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js");
+      const {getFirestore,doc,setDoc,getDoc,getDocs,collection,serverTimestamp,query,where}=await import("https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js");
       const {getAuth,signInAnonymously}=await import("https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js");
       const {getStorage,ref,uploadString,getDownloadURL}=await import("https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js");
       const app=initializeApp(FB);
@@ -2360,6 +2345,11 @@ window.EDITORES = ["nicolas.jara@safecard.cl","fabian.pavez@safecard.cl","franci
         async push(snap){
           const ref=doc(db,'proyectos',snap.id);
           await setDoc(ref, Object.assign({}, snap, {updatedAt: serverTimestamp()}), {merge:true});
+        },
+        async buscarPorPid(pid){
+          const q=await getDocs(query(collection(db,'proyectos'),where('pid','==',pid)));
+          const out=[]; q.forEach(d=>{const x=d.data(); out.push({id:d.id,nombre:x.nombre||'',estado:x.estado||'',upgrade:+x.upgrade||0});});
+          return out;
         }
       };
       window.SafecardCloud={
