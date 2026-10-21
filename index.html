@@ -1723,6 +1723,7 @@ function applyLoaded(d){
   state.equipos.forEach(eq=>{if(!eq.id)eq.id=uid();if(!eq.sector)eq.sector='General';if(!Array.isArray(eq.etapas))eq.etapas=INSTALL_STAGES.map(()=>false);if(eq.etapas.length===4){eq.etapas=[!!eq.cableado,...eq.etapas];}if(eq.etapas.length!==INSTALL_STAGES.length){const n=INSTALL_STAGES.map((_,i)=>!!eq.etapas[i]);eq.etapas=n;}delete eq.cableado;if(!eq.qa)eq.qa={};recomputeProbado(eq);});
   Object.values(state.qc||{}).forEach(q=>{if(Array.isArray(q.evals)&&q.evals.length>1){const v=q.evals.includes('NC')?'NC':q.evals.includes('PC')?'PC':q.evals.includes('C')?'C':null;q.evals=[v];}else if(!Array.isArray(q.evals)){q.evals=[null];}});
   renderAll();
+  _idCargado=projId();
 }
 document.getElementById('fileSesion').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{applyLoaded(JSON.parse(r.result));_dirty=false;autosave();alert('Avance cargado.');}catch(err){alert('Archivo inválido: '+err.message);}};r.readAsText(f);e.target.value='';});
 
@@ -2124,7 +2125,8 @@ function reabrirProyecto(){
 function slugPid(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
 function projId(){
   const pid=slugPid(state.proyecto.pid);
-  if(pid)return 'p_'+pid;
+  const up=+state.proyecto.upgrade||0;
+  if(pid)return 'p_'+pid+(up>0?('_up'+up):'');
   if(!state.proyecto.id){state.proyecto.id='p_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);dirty();}
   return state.proyecto.id;
 }
@@ -2163,14 +2165,14 @@ function buildSnapshot(){
    Un Upgrade se registra con el MISMO N° de servidor (pid) del proyecto
    original, pero con su propio número de Upgrade (1, 2, 3…), para que en el
    Panel aparezcan como tarjetas distintas del mismo servidor. */
-let _pidChequeado='';
+let _pidChequeado='', _idCargado='';
 async function verificarPidExistente(){
   const pid=(document.getElementById('p_pid').value||'').trim();
   const aviso=document.getElementById('pidAviso');
   if(!pid||pid===_pidChequeado)return;
   if(!window.SafecardSync||!window.SafecardSync.enabled||!window.SafecardSync.buscarPorPid)return;
   let otros=[];
-  try{ otros=(await window.SafecardSync.buscarPorPid(pid)).filter(x=>x.id!==state.proyecto.id); }
+  try{ otros=(await window.SafecardSync.buscarPorPid(pid)).filter(x=>!_idCargado||x.id!==_idCargado); }
   catch(e){ console.warn('No se pudo verificar el ID:',e); return; }
   _pidChequeado=pid;
   const miUp=+document.getElementById('p_upgrade').value||0;
@@ -2185,7 +2187,7 @@ async function verificarPidExistente(){
   const siguiente=Math.max(...ups)+1;
   if(confirm('⚠️ El N° de servidor '+pid+' ya existe en el Panel:\n\n'+lista+'\n\n¿Este proyecto es un UPGRADE del mismo servidor?\n\nAceptar → se registrará como "'+pid+' · Upgrade '+siguiente+'".\nCancelar → corrige el N° si es otro proyecto.')){
     document.getElementById('p_upgrade').value=siguiente;
-    state.proyecto.upgrade=siguiente; dirty();
+    state.proyecto.upgrade=siguiente; _idCargado=projId(); dirty();
     if(aviso)aviso.textContent='✓ Registrado como Upgrade '+siguiente+' del servidor '+pid+'.';
   }else{
     _pidChequeado='';
@@ -2199,6 +2201,11 @@ async function syncNow(silent){
   if(!puedeEditar()){ if(!silent)requiereEditar(); return; }
   if(!window.SafecardSync||!window.SafecardSync.enabled){setSyncStatus('⚠ Sincronización no configurada','var(--pc)');if(!silent)alert('La sincronización con el Panel aún no está configurada. Debes pegar la config de Firebase en este archivo (ver instrucciones del Panel de Control).');return;}
   if(!state.equipos.length){setSyncStatus('Nada que sincronizar aún');return;}
+  pullProyecto();
+  if((state.proyecto.pid||'').trim() && projId()!==_idCargado){
+    _pidChequeado=''; await verificarPidExistente();
+    if(document.getElementById('pidAviso').textContent.startsWith('⚠️')){setSyncStatus('⚠ Corrige el N° de servidor antes de sincronizar','var(--nc)');return;}
+  }
   if(!syncAllowed()){setSyncStatus('El proyecto se cargará al Panel al registrar el primer avance','var(--muted)');if(!silent)alert('El proyecto se carga al Panel de Control con el PRIMER registro de avance.\n\nPulsa “＋ Registrar hoy” en la Bitácora para cargarlo.');return;}
   try{
     setSyncStatus('Sincronizando…','var(--or-dark)');
@@ -2219,6 +2226,7 @@ async function nuevoProyecto(){
   if(!confirm('¿Empezar un proyecto NUEVO? Se limpiará lo que está en pantalla. Si necesitas conservarlo, usa “Guardar” antes.'))return;
   await idbClear();
   state={proyecto:{},equipos:[],qc:{},fotos:[],tecnicos:[],insumos:[],cierreObs:'',bitacora:[]};
+  _idCargado='';_pidChequeado='';
   _dirty=false;renderAll();
   alert('Proyecto nuevo. Carga el Detalle de Proyecto o agrega equipos.');
 }
