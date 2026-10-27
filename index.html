@@ -234,6 +234,7 @@
   .qc-status.s-c{background:#DCFCE7;color:#166534}
   .qc-status.s-pc{background:#FEF3C7;color:#92400E}
   .qc-status.s-nc{background:#FEE2E2;color:#991B1B}
+  .qc-status.s-na{background:#E5E7EB;color:#4B5563}
   .qc-status.s-prog{background:var(--or-soft,#FDEDE3);color:var(--or,#F26522)}
   .qc-legend{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 2px;font-size:12.5px;color:#475569}
   .qc-legend span{display:inline-flex;align-items:center;gap:6px}
@@ -247,6 +248,7 @@
   .qcb.c.on{background:var(--c);border-color:var(--c);color:#fff}
   .qcb.pc.on{background:var(--pc);border-color:var(--pc);color:#fff}
   .qcb.nc.on{background:var(--nc);border-color:var(--nc);color:#fff}
+  .qcb.na.on{background:#9CA3AF;border-color:#9CA3AF;color:#fff}
 
   .note{background:#FFF8E6;border:1px solid #FCE9B8;border-radius:8px;padding:10px 12px;font-size:13px;color:#7A5B00}
   .empty{color:var(--muted);font-size:14px;text-align:center;padding:24px}
@@ -555,7 +557,11 @@
     <div class="card-title-bar"><h2>↩️ Devolución de equipos</h2></div>
     <p class="small" style="margin-bottom:10px">Los equipos marcados con "↩️ Devolución" en la pestaña Avance aparecen aquí. Al presionar el botón se envía un correo con el listado (nombre + IP si está disponible) para gestionar la devolución a bodega.</p>
     <div id="devolucionLista" style="margin-bottom:10px"></div>
-    <button class="btn" style="border-color:var(--nc);color:var(--nc)" onclick="realizarDevolucion()" id="btnDevolucion">📤 Realizar devolución</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" style="border-color:var(--nc);color:var(--nc)" onclick="realizarDevolucion()" id="btnDevolucion">📤 Realizar devolución</button>
+      <button class="btn" onclick="quitarDevueltosSinCorreo()" title="Si la devolución ya se informó antes y solo quieres sacarlos del avance">🗑 Quitar del avance sin correo</button>
+    </div>
+    <div id="devolucionHist" style="margin-top:12px"></div>
     <p class="small" id="devolucionStatus" style="margin-top:8px;font-weight:600"></p>
   </div>
   <div class="card">
@@ -933,7 +939,11 @@ function duplicarEquipo(id){
   state.equipos.splice(idx+1,0,copia);
   renderEquipos();renderFotos();dirty();
 }
-function bySector(){const m=new Map();state.equipos.forEach(e=>{const s=e.sector||'General';if(!m.has(s))m.set(s,[]);m.get(s).push(e);});return m;}
+function fotoSrc(f){ if(!f)return ''; if(f.data)return f.data; if(f.driveFileId)return 'https://drive.google.com/thumbnail?id='+f.driveFileId+'&sz=w1200'; return f.driveUrl||f.thumb||''; }
+/* Equipos que requieren foto: los activos (sin devolución) excepto las antenas mAP, que quedan dentro del equipo */
+function requiereFoto(e){ return !/\bmap\b/i.test(e.nombre||''); }
+function eqConFoto(){ return eqActivos().filter(requiereFoto); }
+function bySector(lista){const m=new Map();(lista||state.equipos).forEach(e=>{const s=e.sector||'General';if(!m.has(s))m.set(s,[]);m.get(s).push(e);});return m;}
 let _EQNM={};
 let qaUnitOpen=new Set();
 function renderEquipos(){
@@ -1034,13 +1044,38 @@ function renderDevolucionLista(){
   const cont=document.getElementById('devolucionLista'),btn=document.getElementById('btnDevolucion');
   if(!cont)return;
   const marcados=state.equipos.filter(e=>e.devolucion);
-  if(btn)btn.disabled=!marcados.length;
+  if(btn)btn.disabled=!marcados.length||marcados.every(e=>e.devuelto);
+  const hist=document.getElementById('devolucionHist');
+  if(hist){
+    const h=(state.devoluciones||[]).slice().reverse();
+    hist.innerHTML=h.length?('<div class="small" style="font-weight:700;margin-bottom:4px">Historial de devoluciones</div>'+h.map(d=>`<div class="small" style="padding:4px 0;border-bottom:1px solid var(--line)">📦 ${fmtFecha(d.fecha)} · ${d.equipos.length} equipo(s)${d.conCorreo?' · correo enviado':' · sin correo'}: ${esc(d.equipos.map(x=>x.nombre+(x.ip?' ('+x.ip+')':'')).join(', '))}</div>`).join('')):'';
+  }
   if(!marcados.length){cont.innerHTML='<p class="small" style="color:var(--muted)">No hay equipos marcados para devolución.</p>';return;}
   const disp={};dispNames(state.equipos).forEach(x=>disp[x.e.id]=x.disp);
   cont.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:13px">'
     + '<tr><th style="text-align:left;border-bottom:1px solid var(--line);padding:4px">Equipo</th><th style="text-align:left;border-bottom:1px solid var(--line);padding:4px">IP</th><th style="text-align:left;border-bottom:1px solid var(--line);padding:4px">Sector</th></tr>'
     + marcados.map(e=>`<tr><td style="padding:4px">${esc(disp[e.id]||e.nombre)}</td><td style="padding:4px">${esc(e.ip||'—')}</td><td style="padding:4px">${esc(e.sector||'—')}</td></tr>`).join('')
     + '</table>';
+}
+/* Marca equipos como devueltos (quedan fuera del avance) y guarda el historial */
+function registrarDevueltos(lista, disp, conCorreo){
+  const hoy=hoyISO();
+  state.devoluciones=state.devoluciones||[];
+  state.devoluciones.push({id:uid(),fecha:hoy,conCorreo:!!conCorreo,equipos:lista.map(e=>({nombre:(disp&&disp[e.id])||e.nombre,ip:e.ip||'',sector:e.sector||''}))});
+  lista.forEach(e=>{e.devolucion=true;e.devuelto=true;e.fechaDevolucion=hoy;});
+  renderEquipos();recalc();dirty();
+}
+/* Para devoluciones ya enviadas antes: quitar del avance sin volver a mandar el correo */
+function quitarDevueltosSinCorreo(){
+  if(!requiereEditar())return;
+  const marcados=state.equipos.filter(e=>e.devolucion);
+  if(!marcados.length){alert('No hay equipos marcados para devolución.');return;}
+  if(!confirm('¿Quitar del avance '+marcados.length+' equipo(s) marcados para devolución SIN enviar correo?\n\nÚsalo solo si la devolución ya se informó antes.'))return;
+  const disp={};dispNames(state.equipos).forEach(x=>disp[x.e.id]=x.disp);
+  registrarDevueltos(marcados, disp, false);
+  state.equipos=state.equipos.filter(e=>!e.devuelto);
+  renderAll();dirty();
+  const st=document.getElementById('devolucionStatus'); if(st){st.textContent='✅ '+marcados.length+' equipo(s) quitados del avance.';st.style.color='var(--green)';}
 }
 async function realizarDevolucion(){
   if(!requiereEditar())return;
@@ -1056,7 +1091,8 @@ async function realizarDevolucion(){
     const res=await fetch(window.DEVOLUCION_ENDPOINT,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
     const data=await res.json();
     if(data&&data.ok){
-      status.textContent='✅ Correo de devolución enviado ('+data.enviados+' equipo(s)).';status.style.color='var(--green)';
+      registrarDevueltos(marcados, disp, true);
+      status.textContent='✅ Correo de devolución enviado ('+data.enviados+' equipo(s)). Ya no cuentan en el avance y se quitarán de la lista al volver a cargar el proyecto.';status.style.color='var(--green)';
     }else{
       status.textContent='⚠ '+((data&&data.error)||'No se pudo enviar.');status.style.color='var(--nc)';
     }
@@ -1076,13 +1112,14 @@ function qcStatus(q){
   const v=q.evals[0];
   if(!v)return{cls:'pend',label:'Pendiente'};
   if(v==='NC')return{cls:'nc',label:'No conforme'};
+  if(v==='NA')return{cls:'na',label:'No aplica'};
   if(v==='PC')return{cls:'pc',label:'Con observaciones'};
   return{cls:'c',label:'Conforme'};
 }
 function renderQC(){
   const c=document.getElementById('qcList');c.innerHTML='';
   const jefe=state.proyecto.jefe||'';
-  const OPTS=[['C','✓ Conforme'],['PC','! Observación'],['NC','✕ No conforme']];
+  const OPTS=[['C','✓ Conforme'],['PC','! Observación'],['NC','✕ No conforme'],['NA','N/A']];
   QC_DEFS.forEach(def=>{
     if(!state.qc[def.code])state.qc[def.code]={resp:'',evals:[null],obs:''};
     const q=state.qc[def.code];if(!q.resp&&jefe)q.resp=jefe;
@@ -1104,11 +1141,13 @@ function setQC(code,f,v){state.qc[code][f]=v;recalc();dirty();}
 /* FOTOS */
 let _evTarget=null,_multiTarget=null;
 function renderFotos(){
-  document.getElementById('evEmpty').style.display=state.equipos.length?'none':'block';
-  const conPhoto=state.equipos.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
-  document.getElementById('evContador').textContent=`Evidencia: ${conPhoto}/${state.equipos.length} equipos con foto. Las imágenes se comprimen automáticamente.`;
+  const lista=eqConFoto();
+  document.getElementById('evEmpty').style.display=lista.length?'none':'block';
+  const conPhoto=lista.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
+  const sinFoto=eqActivos().length-lista.length;
+  document.getElementById('evContador').textContent=`Evidencia: ${conPhoto}/${lista.length} equipos con foto.`+(sinFoto?` (${sinFoto} antena(s) mAP no requieren foto.)`:'')+' Las imágenes se comprimen automáticamente.';
   const cont=document.getElementById('evGroups');cont.innerHTML='';
-  bySector().forEach((items,sector)=>{
+  bySector(lista).forEach((items,sector)=>{
     const h=document.createElement('div');h.className='sector-head';
     const ok=items.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
     h.innerHTML=`<span class="nm">${esc(sector)}</span><span class="badge">${ok}/${items.length} con foto</span>`;
@@ -1117,8 +1156,8 @@ function renderFotos(){
     items.forEach(e=>{
       const foto=state.fotos.find(f=>f.equipoId===e.id);
       const slot=document.createElement('div');slot.className='ev-slot'+(foto?' has':'');
-      const fotoImg=foto&&(foto.data||foto.driveUrl||foto.thumb);
-      slot.innerHTML=`<div class="ev-thumb" onclick="pedirEvidencia('${e.id}')">${fotoImg?`<img src="${foto.data||foto.driveUrl||foto.thumb}">`:(foto?`<div class="ph" style="color:var(--pc)"><span class="big">☁️</span><span>Pendiente de subir<br>(foto tomada en otro dispositivo)</span></div>`:`<div class="ph"><span class="big">📸</span><span>Subir foto</span></div>`)}${foto?`<button class="ev-del" onclick="event.stopPropagation();delFoto('${foto.id}')">✕</button>`:''}</div>
+      const fotoImg=fotoSrc(foto);
+      slot.innerHTML=`<div class="ev-thumb" onclick="pedirEvidencia('${e.id}')">${fotoImg?`<img src="${fotoImg}" loading="lazy">`:(foto?`<div class="ph" style="color:var(--pc)"><span class="big">☁️</span><span>Foto en el dispositivo del técnico<br>(debe presionar ☁️ Guardar en la nube)</span></div>`:`<div class="ph"><span class="big">📸</span><span>Subir foto</span></div>`)}${foto?`<button class="ev-del" onclick="event.stopPropagation();delFoto('${foto.id}')">✕</button>`:''}</div>
         <div class="ev-meta"><span class="nm">${esc(_EQNM[e.id]||e.nombre)}</span><span class="ev-tag ${foto?'ok':'no'}">${foto?'OK':'falta'}</span></div>`;
       g.appendChild(slot);
     });
@@ -1126,7 +1165,7 @@ function renderFotos(){
   });
   const mz=document.getElementById('multiZones');mz.innerHTML='';
   MULTI_CATS.forEach(cat=>{const fotos=state.fotos.filter(f=>f.cat===cat.id);const div=document.createElement('div');div.className='multi-zone';
-    div.innerHTML=`<h3>${cat.label} <span class="small" style="font-weight:600">· ${fotos.length} foto(s)</span></h3><div class="mz-grid">${fotos.map(f=>`<div class="mz-photo"><img src="${f.data||f.driveUrl||f.thumb||''}"><button class="del" onclick="delFoto('${f.id}')">✕</button></div>`).join('')}<div class="mz-add" onclick="pedirMulti('${cat.id}')"><span style="font-size:22px">＋</span>Agregar</div></div>`;
+    div.innerHTML=`<h3>${cat.label} <span class="small" style="font-weight:600">· ${fotos.length} foto(s)</span></h3><div class="mz-grid">${fotos.map(f=>`<div class="mz-photo"><img src="${fotoSrc(f)}" loading="lazy"><button class="del" onclick="delFoto('${f.id}')">✕</button></div>`).join('')}<div class="mz-add" onclick="pedirMulti('${cat.id}')"><span style="font-size:22px">＋</span>Agregar</div></div>`;
     mz.appendChild(div);});
 }
 function pedirEvidencia(id){_evTarget=id;document.getElementById('fileEvidencia').click();}
@@ -1170,12 +1209,12 @@ function sugerirInsumos(){generarMateriales();}
 /* RECALC */
 function recalc(){
   pullProyecto();
-  let done=0,total=0;state.equipos.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
-  const av=total?Math.round(done/total*100):0;const tot=state.equipos.length;
-  const cabReady=state.equipos.filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
-  const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
+  let done=0,total=0;eqActivos().forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
+  const av=total?Math.round(done/total*100):0;const tot=eqActivos().length;
+  const cabReady=eqActivos().filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
+  const listos=eqActivos().filter(e=>e.etapas.every(Boolean)).length;
   setText('kEquipos',tot);setText('kCab',cabPct+'%');setText('kListos',listos+'/'+tot);setText('kAvance',av+'%');setText('pillAvanceGlobal',av+'%');document.getElementById('barAvance').style.width=av+'%';
-  let pts=0,maxAll=0,nc=0,ev=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;if(s.max>0)ev++;q.evals.forEach(v=>{if(v==='NC')nc++;});});
+  let pts=0,maxAll=0,nc=0,ev=QC_DEFS.filter(d=>{const q=state.qc[d.code];return q&&q.evals&&q.evals[0]==='NA';}).length;QC_DEFS.forEach(d=>{const q=state.qc[d.code];if(q&&q.evals&&q.evals[0]==='NA')return;maxAll+=d.d.length*3;if(!q)return;const s=qcScore(q);pts+=s.pts;if(s.max>0)ev++;q.evals.forEach(v=>{if(v==='NC')nc++;});});
   const conf=maxAll?Math.round(pts/maxAll*100):0;setText('qcPuntaje',pts+' / '+maxAll);setText('qcConf',conf+'%');setText('qcNC',nc);setText('qcEval',ev+'/'+QC_DEFS.length);setText('pillQC',conf+'%');document.getElementById('barQC').style.width=conf+'%';
   const ini=document.getElementById('p_inicio').value,fin=document.getElementById('p_termino').value;let dias=0;if(ini&&fin){dias=Math.round((new Date(fin)-new Date(ini))/86400000)+1;if(dias<0)dias=0;}
   const dh=state.tecnicos.reduce((a,t)=>a+(t.dias||0),0);setText('cDias',dias);setText('cTecnicos',state.tecnicos.length);setText('cDiasHombre',dh);
@@ -1198,29 +1237,30 @@ function barsHtml(rows,green){
 }
 function renderDashboard(){
   const dash=document.getElementById('dashboard');const card=document.getElementById('dashCard');if(!dash)return;
-  const N=state.equipos.length;
+  const N=eqActivos().length;
   if(N===0){card.style.display='none';return;}
   card.style.display='block';
   document.getElementById('dashEstado').textContent=state.proyecto.estado||'Sin iniciar';
   // avance
-  let done=0,total=0;state.equipos.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
+  let done=0,total=0;eqActivos().forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
   const av=total?Math.round(done/total*100):0;
-  const completados=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
-  const sinIniciar=state.equipos.filter(e=>e.etapas.every(x=>!x)).length;
+  const completados=eqActivos().filter(e=>e.etapas.every(Boolean)).length;
+  const sinIniciar=eqActivos().filter(e=>e.etapas.every(x=>!x)).length;
   const enProceso=N-completados-sinIniciar;
   // etapas
-  const stageCount=INSTALL_STAGES.map((_,i)=>state.equipos.filter(e=>e.etapas[i]).length);
+  const stageCount=INSTALL_STAGES.map((_,i)=>eqActivos().filter(e=>e.etapas[i]).length);
   // por sector
   const secRows=[];bySector().forEach((items,sector)=>{const t=items.length*INSTALL_STAGES.length;const d=items.reduce((a,e)=>a+e.etapas.filter(Boolean).length,0);secRows.push({nm:sector,pct:t?Math.round(d/t*100):0});});
   // QA
-  let qd=0,qt=0;state.equipos.forEach(e=>{const p=qaProgress(e);qd+=p.done;qt+=p.total;});
+  let qd=0,qt=0;eqActivos().forEach(e=>{const p=qaProgress(e);qd+=p.done;qt+=p.total;});
   const qaPct=qt?Math.round(qd/qt*100):0;
   // QC
-  let pts=0,maxAll=0,nc=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;q.evals.forEach(v=>{if(v==='NC')nc++;});});
+  let pts=0,maxAll=0,nc=0;QC_DEFS.forEach(d=>{const q=state.qc[d.code];if(q&&q.evals&&q.evals[0]==='NA')return;maxAll+=d.d.length*3;if(!q)return;const s=qcScore(q);pts+=s.pts;q.evals.forEach(v=>{if(v==='NC')nc++;});});
   const conf=maxAll?Math.round(pts/maxAll*100):0;
   // evidencia
-  const conFoto=state.equipos.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
-  const evPct=Math.round(conFoto/N*100);
+  const _reqF=eqConFoto();
+  const conFoto=_reqF.filter(e=>state.fotos.some(f=>f.equipoId===e.id)).length;
+  const evPct=_reqF.length?Math.round(conFoto/_reqF.length*100):0;
   // dias
   const ini=state.proyecto.inicio,fin=state.proyecto.termino;let dias=0;if(ini&&fin){dias=Math.round((new Date(fin)-new Date(ini))/86400000)+1;if(dias<0)dias=0;}
   const nTec=state.tecnicos.length;
@@ -1307,11 +1347,29 @@ async function guardarNube(silent){
     dirty(); // las fotos ya tienen driveUrl/thumb; guarda ese cambio también localmente
   }
 
+  // Cada foto se guarda en la nube como un registro aparte (no depende de Drive ni
+  // del límite de 1 MB del avance). Así cualquier otro dispositivo puede verlas.
+  let fotosNube=0, fotosNubeFallidas=0, _errNube='';
+  if(window.SafecardCloud.saveFoto){
+    const porSubir=(state.fotos||[]).filter(f=>f.data && !(f.nubeOk && f.nubeId===id));
+    if(porSubir.length) setSyncStatus('☁️ Guardando '+porSubir.length+' foto(s) en la nube…','var(--muted)');
+    for(const f of porSubir){
+      try{
+        let data=f.data; if(data.length>900000) data=await generarThumb_(data,1000,0.6);
+        await window.SafecardCloud.saveFoto(id, f.id, {data, equipoId:f.equipoId||'', cat:f.cat||'', desc:f.desc||''});
+        f.nubeOk=true; f.nubeId=id; fotosNube++;
+      }catch(e){ fotosNubeFallidas++; if(!_errNube)_errNube=(e&&e.message)||String(e); console.warn('No se pudo guardar la foto '+f.id+' en la nube:',e); }
+    }
+    if(fotosNube) dirty();
+  }
+
   let st=JSON.parse(JSON.stringify(state));
   // El documento de la nube nunca necesita el base64 completo de las fotos que ya
   // están en Drive — se manda solo la miniatura liviana + el link a la foto real.
   if(Array.isArray(st.fotos)){
-    st.fotos=st.fotos.map(f=> f.driveUrl
+    st.fotos=st.fotos.map(f=> (f.nubeOk && f.nubeId===id)
+      ? {id:f.id,cat:f.cat,equipoId:f.equipoId,desc:f.desc,enNube:true,nubeId:id,driveUrl:f.driveUrl,driveFileId:f.driveFileId}
+      : f.driveUrl
       ? {id:f.id,cat:f.cat,equipoId:f.equipoId,desc:f.desc,driveUrl:f.driveUrl,driveFileId:f.driveFileId,thumb:f.thumb}
       : f);
   }
@@ -1334,14 +1392,29 @@ async function guardarNube(silent){
   let payload={nombre:state.proyecto.nombre||'',pid:state.proyecto.pid||'',updatedBy:state.proyecto.jefe||'',stateJson:stStr,sinFotos:sinFotos};
   try{
     await window.SafecardCloud.save(id,payload);
-    const detFotos = fotosSubidas ? (' · '+fotosSubidas+' foto(s) subida(s) a Drive') : '';
-    const avisoFallo = fotosFallidas ? (' ⚠️ '+fotosFallidas+' foto(s) no se pudieron subir a Drive. Motivo: '+(_ultimoErrorFotoDrive||'desconocido')+'.') : '';
+    const totalNube=(state.fotos||[]).filter(f=>f.nubeOk&&f.nubeId===id).length;
+    const detFotos = (fotosNube||totalNube ? (' · '+totalNube+' foto(s) disponibles en la nube'+(fotosNube?(' ('+fotosNube+' nuevas)'):'')) : '') + (fotosSubidas ? (' · '+fotosSubidas+' foto(s) subida(s) a Drive') : '');
+    const avisoFallo = (fotosNubeFallidas ? (' ⚠️ '+fotosNubeFallidas+' foto(s) NO se pudieron guardar en la nube ('+_errNube+'). Vuelve a presionar Guardar en la nube.') : '')
+                     + (fotosFallidas ? (' ⚠️ '+fotosFallidas+' foto(s) no se pudieron subir a Drive. Motivo: '+(_ultimoErrorFotoDrive||'desconocido')+'.') : '');
     if(!silent){alert('✅ Avance guardado en la nube.'+detFotos+avisoFallo+(sinFotos?'\n\n(Quedó algo pesado igual; revisa la conexión.)':'')+'\n\nAhora puedes cargarlo en otro dispositivo con “☁️ Cargar de la nube”.');}
     else{setSyncStatus('☁️ Bitácora guardada en la nube — mañana puedes seguir desde aquí'+detFotos+avisoFallo,sinFotos?'var(--pc)':'var(--green)');}
   }catch(e){
     if(!silent){alert('No se pudo guardar en la nube: '+(e.message||e));}
     else{setSyncStatus('⚠ No se pudo guardar en la nube: '+(e.message||e),'var(--nc)');}
   }
+}
+/* Trae desde la nube las fotos guardadas como registros aparte y las pone en el avance */
+async function hidratarFotosNube(id){
+  if(!window.SafecardCloud||!window.SafecardCloud.loadFotos||!id)return;
+  let mapa={};
+  try{ setSyncStatus('☁️ Descargando fotos…','var(--muted)'); mapa=await window.SafecardCloud.loadFotos(id); }
+  catch(e){ console.warn('No se pudieron leer las fotos de la nube:',e); setSyncStatus('⚠ No se pudieron descargar las fotos: '+(e.message||e),'var(--nc)'); return; }
+  state.fotos=state.fotos||[];
+  let n=0;
+  state.fotos.forEach(f=>{ const x=mapa[f.id]; if(x&&x.data&&!f.data){ f.data=x.data; f.nubeOk=true; f.nubeId=id; delete f.pendienteSubir; n++; } });
+  Object.keys(mapa).forEach(fid=>{ if(!state.fotos.some(f=>f.id===fid)&&mapa[fid].data){ const x=mapa[fid]; state.fotos.push({id:fid,equipoId:x.equipoId||undefined,cat:x.cat||undefined,desc:x.desc||'',data:x.data,nubeOk:true,nubeId:id}); n++; } });
+  if(n){ renderAll(); autosave(); }
+  setSyncStatus(n?('✅ '+n+' foto(s) descargadas de la nube'):'☁️ Avance cargado','var(--green)');
 }
 async function cargarNube(){
   if(!window.SafecardCloud||!window.SafecardCloud.enabled){alert('La nube no está disponible.\n\nAbre la app desde su dirección web (https / GitHub Pages) con internet, no desde un archivo local.');return;}
@@ -1359,6 +1432,7 @@ async function cargarNube(){
     if(!st){alert('No se pudo cargar el avance.');return;}
     if(!confirm('¿Cargar “'+(list[idx].nombre||list[idx].id)+'”?\nSe reemplazará lo que tengas abierto ahora.'))return;
     applyLoaded(st);_dirty=false;autosave();
+    await hidratarFotosNube(list[idx].id);
     alert('✅ Avance cargado desde la nube'+(data.sinFotos?' (sin fotos).':'.'));
   }catch(e){alert('No se pudo cargar: '+(e.message||e));}
 }
@@ -1720,6 +1794,8 @@ function applyLoaded(d){
   state=Object.assign({proyecto:{},equipos:[],qc:{},fotos:[],tecnicos:[],insumos:[],cierreObs:'',bitacora:[]},d);
   if(!state.bitacora)state.bitacora=[];
   state.equipos=(state.equipos||[]).filter(e=>!/pilar/i.test(e.nombre||''));
+  state.equipos=state.equipos.filter(e=>!e.devuelto);   // devoluciones ya informadas: fuera del avance
+  if(!state.devoluciones)state.devoluciones=[];
   state.equipos.forEach(eq=>{if(!eq.id)eq.id=uid();if(!eq.sector)eq.sector='General';if(!Array.isArray(eq.etapas))eq.etapas=INSTALL_STAGES.map(()=>false);if(eq.etapas.length===4){eq.etapas=[!!eq.cableado,...eq.etapas];}if(eq.etapas.length!==INSTALL_STAGES.length){const n=INSTALL_STAGES.map((_,i)=>!!eq.etapas[i]);eq.etapas=n;}delete eq.cableado;if(!eq.qa)eq.qa={};recomputeProbado(eq);});
   Object.values(state.qc||{}).forEach(q=>{if(Array.isArray(q.evals)&&q.evals.length>1){const v=q.evals.includes('NC')?'NC':q.evals.includes('PC')?'PC':q.evals.includes('C')?'C':null;q.evals=[v];}else if(!Array.isArray(q.evals)){q.evals=[null];}});
   renderAll();
@@ -1750,27 +1826,27 @@ async function generarInforme(){
   await new Promise(r=>setTimeout(r,20)); // deja que el botón pinte el estado "Generando…" antes del trabajo pesado
   try{
     pullProyecto();state.cierreObs=document.getElementById('cierreObs').value;const p=state.proyecto;
-    const tot=state.equipos.length;
-    let done=0,tt=0;state.equipos.forEach(e=>{tt+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
-    const av=tt?Math.round(done/tt*100):0;const cabReady=state.equipos.filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
-    const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
-    let pts=0,maxAll=0,nc=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;const s=qcScore(q);pts+=s.pts;q.evals.forEach(v=>{if(v==='NC')nc++;});});
+    const tot=eqActivos().length;
+    let done=0,tt=0;eqActivos().forEach(e=>{tt+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
+    const av=tt?Math.round(done/tt*100):0;const cabReady=eqActivos().filter(e=>e.etapas[0]).length;const cabPct=tot?Math.round(cabReady/tot*100):0;
+    const listos=eqActivos().filter(e=>e.etapas.every(Boolean)).length;
+    let pts=0,maxAll=0,nc=0;QC_DEFS.forEach(d=>{const q=state.qc[d.code];if(q&&q.evals&&q.evals[0]==='NA')return;maxAll+=d.d.length*3;if(!q)return;const s=qcScore(q);pts+=s.pts;q.evals.forEach(v=>{if(v==='NC')nc++;});});
     const conf=maxAll?Math.round(pts/maxAll*100):0;
     const ini=p.inicio,fin=p.termino;let dias=0;if(ini&&fin){dias=Math.round((new Date(fin)-new Date(ini))/86400000)+1;if(dias<0)dias=0;}
     const fmtD=d=>d?new Date(d+'T00:00').toLocaleDateString('es-CL'):'—';
-    const stB=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">C</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">PC</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">NC</span>':'<span style="color:#aaa">—</span>';
+    const stB=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">C</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">PC</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">NC</span>':v==='NA'?'<span class="badge-st" style="background:#9CA3AF">N/A</span>':'<span style="color:#aaa">—</span>';
     const nCols=INSTALL_STAGES.length+2;
-    const _eqDisp={};dispNames(state.equipos).forEach(x=>_eqDisp[x.e.id]=x.disp);
-    let eqRows='';bySector().forEach((items,sector)=>{eqRows+=`<tr class="sec-row"><td colspan="${nCols}">${esc(sector)}</td></tr>`;items.forEach(e=>{eqRows+=`<tr><td>${esc(_eqDisp[e.id]||e.nombre)}</td>${e.etapas.map(s=>`<td class="center">${s?'✓':'—'}</td>`).join('')}<td class="center">${Math.round(e.etapas.filter(Boolean).length/INSTALL_STAGES.length*100)}%</td></tr>`;});});
-    const stWord=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">Conforme</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">Observación</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">No conforme</span>':'<span style="color:#aaa">Pendiente</span>';
+    const _eqDisp={};dispNames(eqActivos()).forEach(x=>_eqDisp[x.e.id]=x.disp);
+    let eqRows='';bySector(eqActivos()).forEach((items,sector)=>{eqRows+=`<tr class="sec-row"><td colspan="${nCols}">${esc(sector)}</td></tr>`;items.forEach(e=>{eqRows+=`<tr><td>${esc(_eqDisp[e.id]||e.nombre)}</td>${e.etapas.map(s=>`<td class="center">${s?'✓':'—'}</td>`).join('')}<td class="center">${Math.round(e.etapas.filter(Boolean).length/INSTALL_STAGES.length*100)}%</td></tr>`;});});
+    const stWord=v=>v==='C'?'<span class="badge-st" style="background:var(--c)">Conforme</span>':v==='PC'?'<span class="badge-st" style="background:var(--pc)">Observación</span>':v==='NC'?'<span class="badge-st" style="background:var(--nc)">No conforme</span>':v==='NA'?'<span class="badge-st" style="background:#9CA3AF">No aplica</span>':'<span style="color:#aaa">Pendiente</span>';
     let qcRows=QC_DEFS.map(d=>{const q=state.qc[d.code]||{evals:[null]};return `<tr><td>${d.code}</td><td>${d.name}</td><td>${esc((state.qc[d.code]||{}).resp||'—')}</td><td class="center">${stWord(q.evals[0])}</td></tr>`;}).join('');
     const ncList=QC_DEFS.map(d=>({d,o:(state.qc[d.code]||{}).obs})).filter(x=>x.o);
     let obsHtml=ncList.length?('<ul style="margin:0;padding-left:18px;font-size:12px">'+ncList.map(x=>`<li><b>${x.d.code}:</b> ${esc(x.o)}</li>`).join('')+'</ul>'):'<p class="small">Sin observaciones registradas.</p>';
-    const fotosOrd=[...state.equipos.map(e=>{const f=state.fotos.find(x=>x.equipoId===e.id);return f?{f,cap:e.sector+' · '+(_eqDisp[e.id]||e.nombre)}:null;}).filter(Boolean),...state.fotos.filter(f=>f.cat==='electrico').map(f=>({f,cap:'Circuito eléctrico'})),...state.fotos.filter(f=>f.cat==='internet').map(f=>({f,cap:'Internet / conectividad'})),...state.fotos.filter(f=>f.cat==='otros').map(f=>({f,cap:'Otros'}))];
+    const fotosOrd=[...eqActivos().map(e=>{const f=state.fotos.find(x=>x.equipoId===e.id);return f?{f,cap:e.sector+' · '+(_eqDisp[e.id]||e.nombre)}:null;}).filter(Boolean),...state.fotos.filter(f=>f.cat==='electrico').map(f=>({f,cap:'Circuito eléctrico'})),...state.fotos.filter(f=>f.cat==='internet').map(f=>({f,cap:'Internet / conectividad'})),...state.fotos.filter(f=>f.cat==='otros').map(f=>({f,cap:'Otros'}))];
     // Miniaturas livianas SOLO para este informe (no se guardan): en el PDF cada foto
     // mide ~120px de alto, así que no tiene sentido incrustar la versión de 1280px guardada.
     // Esto es lo que hacía lento el botón "Informe", sobre todo en el teléfono.
-    const thumbs = await Promise.all(fotosOrd.map(o=>thumbFromDataUrl(o.f.data||o.f.driveUrl||o.f.thumb, 380, 0.55)));
+    const thumbs = await Promise.all(fotosOrd.map(o=>thumbFromDataUrl(fotoSrc(o.f), 380, 0.55)));
     let fotosHtml=fotosOrd.length?('<div class="r-photos">'+fotosOrd.map((o,i)=>`<div class="r-photo"><img src="${thumbs[i]}"><div class="cap">${esc(o.cap)}</div></div>`).join('')+'</div>'):'<p class="small">Sin fotografías cargadas.</p>';
     document.getElementById('reporte').innerHTML=`<div>
       <div class="r-head"><div>${LOGO_REPORT}</div>
@@ -1824,7 +1900,7 @@ function dispNames(list){
     const b=baseSinNumero(e.nombre);const f=flujoDe(e);const nm=b+(f?' '+f:'');const k=(e.sector||'')+'|'+b+'|'+f;let d=nm;if(cnt[k]>1){seen[k]=(seen[k]||0)+1;d=nm+' '+seen[k];}return{e,disp:d};
   });
 }
-function actaList(){return state.equipos.filter(e=>!ACTA_EXCL.test(e.nombre||'')&&!esPilar(e));}
+function actaList(){return eqActivos().filter(e=>!ACTA_EXCL.test(e.nombre||'')&&!esPilar(e));}
 function actaRows(){return dispNames(actaList());}
 function setActaFlujo(id,v){const e=state.equipos.find(x=>x.id===id);if(!e)return;actaOf(e).flujo=v;renderActaEditor();dirty();}
 function actaOf(e){if(!e.acta)e.acta={inst:!!e.etapas[1],oper:!!e.etapas[3],prue:!!e.etapas[4],coment:e.comentario||''};return e.acta;}
@@ -1951,11 +2027,13 @@ function generarActa(){
   const win=window.open(url,'_blank');
   if(!win){alert('El navegador bloqueó la ventana nueva. Permite las ventanas emergentes para este sitio e inténtalo de nuevo.');}
 }
+/* Equipos que cuentan para el avance: los marcados para devolución quedan fuera */
+function eqActivos(){return (state.equipos||[]).filter(e=>!e.devolucion);}
 function getStats(){
-  const eq=state.equipos,tot=eq.length;let done=0,total=0;eq.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
+  const eq=eqActivos(),tot=eq.length;let done=0,total=0;eq.forEach(e=>{total+=INSTALL_STAGES.length;done+=e.etapas.filter(Boolean).length;});
   const avance=total?Math.round(done/total*100):0;
   const cab=eq.filter(e=>e.etapas[0]).length,cabPct=tot?Math.round(cab/tot*100):0;
-  let pts=0,maxAll=0;QC_DEFS.forEach(d=>{maxAll+=d.d.length*3;const q=state.qc[d.code];if(!q)return;pts+=qcScore(q).pts;});
+  let pts=0,maxAll=0;QC_DEFS.forEach(d=>{const q=state.qc[d.code];if(q&&q.evals&&q.evals[0]==='NA')return;maxAll+=d.d.length*3;if(!q)return;pts+=qcScore(q).pts;});
   const qcConf=maxAll?Math.round(pts/maxAll*100):0;
   let qd=0,qt=0;eq.forEach(e=>{const p=qaProgress(e);qd+=p.done;qt+=p.total;});
   const qaPct=qt?Math.round(qd/qt*100):0;
@@ -2132,7 +2210,7 @@ function projId(){
 }
 function buildSnapshot(){
   const st=getStats(),sc=scheduleCalc(),p=state.proyecto;
-  const listos=state.equipos.filter(e=>e.etapas.every(Boolean)).length;
+  const listos=eqActivos().filter(e=>e.etapas.every(Boolean)).length;
   const dh=state.tecnicos.reduce((a,t)=>a+(t.dias||0),0);
   const MS=86400000;
   const dd=(a,b)=>(a&&b)?Math.round((new Date(b+'T00:00')-new Date(a+'T00:00'))/MS):null;
@@ -2141,14 +2219,14 @@ function buildSnapshot(){
   const diasPlan=dd(p.inicio,p.termino);
   const diasReales=finalizado?dd(p.inicio,fechaCierre):null;
   const desvioDias=(diasPlan!=null&&diasReales!=null)?(diasReales-diasPlan):null;
-  const nEq=state.equipos.length;
+  const nEq=eqActivos().length;
   return{
     id:projId(), pid:(state.proyecto.pid||'').trim(), upgrade:(+state.proyecto.upgrade||0), nombre:p.nombre||document.getElementById('p_nombre').value||'(sin nombre)',
     direccion:p.direccion||document.getElementById('p_direccion').value||'', comuna:p.comuna||'',
     jefe:p.jefe||'', ejecutivo:p.ejecutivo||'',
     inicio:p.inicio||'', termino:p.termino||'', plazo:p.plazo||'', limite:p.limite||'',
     avance:st.avance, cabPct:st.cabPct, qcConf:st.qcConf, qaPct:st.qaPct,
-    equiposTotal:nEq, equiposListos:listos, equiposEnTerreno:state.equipos.filter(e=>e.enTerreno).length,
+    equiposTotal:nEq, equiposListos:listos, equiposEnTerreno:eqActivos().filter(e=>e.enTerreno).length,
     nTecnicos:state.tecnicos.length, diasHombre:dh,
     estado: finalizado?'Finalizado':(sc.ok?sc.estado:'Sin fechas'),
     finalizado, fechaCierre,
@@ -2277,7 +2355,7 @@ async function cargarProyectoDesdeURL(){
   try{
     const data=await window.SafecardCloud.load(pid);
     const st=estadoDeNube(data);
-    if(st){applyLoaded(st);_dirty=false;return true;}
+    if(st){applyLoaded(st);_dirty=false;await hidratarFotosNube(pid);return true;}
     // No hay un respaldo detallado guardado en 'avances' todavía (nadie usó
     // "☁️ Guardar en la nube" en este proyecto). Igual seguimos con ESTE
     // mismo id — nunca uno nuevo al azar — para que lo que se registre en
@@ -2291,6 +2369,24 @@ async function cargarProyectoDesdeURL(){
   return false;
 }
 
+/* Aviso al abrir desde el Panel con "📄 Informe de instalación" (proyecto finalizado):
+   se pueden agregar/reemplazar fotos y luego descargar el informe. */
+function mostrarBannerInforme(){
+  const grid=document.getElementById('evGroups'); if(!grid)return;
+  const card=grid.closest('.card')||grid.parentElement;
+  if(document.getElementById('bannerInforme'))return;
+  const b=document.createElement('div');
+  b.id='bannerInforme';
+  b.style.cssText='background:#EFF6FF;border:1px solid #93C5FD;border-radius:12px;padding:14px 16px;margin-bottom:14px';
+  const fin=(state.proyecto&&state.proyecto.estado)==='Finalizado';
+  b.innerHTML='<div style="font-weight:800;color:#1D4ED8;margin-bottom:4px">📄 Informe de instalación'+(fin?' · proyecto finalizado':'')+'</div>'+
+    '<div class="small" style="margin-bottom:10px">Puedes <b>agregar o reemplazar fotos</b> tocando cada equipo. Cuando termines, guarda en la nube para respaldarlas y descarga el informe.</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      '<button onclick="guardarNube()" style="border:1px solid #1D4ED8;background:#fff;color:#1D4ED8;border-radius:10px;padding:10px 16px;font-weight:800;font-size:14px;cursor:pointer">☁️⬆️ Guardar fotos en la nube</button>'+
+      '<button onclick="generarInforme()" style="border:none;background:#1D4ED8;color:#fff;border-radius:10px;padding:10px 16px;font-weight:800;font-size:14px;cursor:pointer">📄 Descargar informe</button>'+
+    '</div>';
+  card.parentElement.insertBefore(b, card);
+}
 (async function init(){
   renderSesion();
   const desdeURL=await cargarProyectoDesdeURL();
@@ -2299,6 +2395,11 @@ async function cargarProyectoDesdeURL(){
     if(accion==='acta'){
       const tabCierre=document.querySelector('.tab[data-tab="cierre"]');
       if(tabCierre){ tabCierre.click(); setTimeout(()=>{ try{ generarActa(); }catch(e){} }, 200); }
+    }
+    if(accion==='informe'){
+      const tabFotos=document.querySelector('.tab[data-tab="fotos"]');
+      if(tabFotos) tabFotos.click();
+      mostrarBannerInforme();
     }
     return;
   }
@@ -2364,6 +2465,8 @@ window.EDITORES = ["nicolas.jara@safecard.cl","fabian.pavez@safecard.cl","franci
         enabled:true,
         async save(id,payload){ await setDoc(doc(db,'avances',id), Object.assign({},payload,{updatedAt:serverTimestamp()}), {merge:false}); },
         async load(id){ const s=await getDoc(doc(db,'avances',id)); return s.exists()?s.data():null; },
+        async saveFoto(id, fotoId, data){ await setDoc(doc(db,'avances',id,'fotos',fotoId), Object.assign({},data,{updatedAt:serverTimestamp()})); },
+        async loadFotos(id){ const q=await getDocs(collection(db,'avances',id,'fotos')); const out={}; q.forEach(d=>{out[d.id]=d.data();}); return out; },
         async list(){ const q=await getDocs(collection(db,'avances')); const out=[]; q.forEach(d=>{const x=d.data(); out.push({id:d.id, nombre:x.nombre||'', pid:x.pid||'', updatedAt:x.updatedAt||null, sinFotos:!!x.sinFotos});}); return out; },
         // Sube UNA foto (data-URI base64) a Firebase Storage y devuelve su URL pública.
         // Así las fotos quedan afuera del documento de Firestore (que tiene límite de 1MB).
