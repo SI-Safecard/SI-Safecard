@@ -471,7 +471,14 @@
       <button class="btn" style="border-color:var(--nc);color:var(--nc)" onclick="marcarDiaNoEfectivo()">🚫 Marcar rango como no efectivo</button>
     </div>
     <p class="small" style="color:var(--muted);margin-top:2px">Si dejas "Hasta" vacío, se marca solo el día de "Desde". Si pones ambos, se marcan todos los días del rango de una vez.</p>
+    <div class="row-flex" style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)">
+      <div style="width:160px"><label>Fin de semana trabajado</label><input type="date" id="diaFindeFecha"></div>
+      <div class="grow"><label>Nota (opcional)</label><input id="diaFindeNota" placeholder="Ej: se trabajó el sábado para recuperar atraso"></div>
+      <button class="btn" style="border-color:#7C3AED;color:#6D28D9" onclick="marcarDiaFinde()">📅 Registrar sábado / domingo trabajado</button>
+    </div>
+    <p class="small" style="color:var(--muted);margin-top:2px">Los días de ejecución cuentan de <b>lunes a viernes</b>. Un sábado o domingo solo suma si queda registrado aquí — y se marca solo cuando un técnico registra avance ese día.</p>
     <div id="diasEfectivosResumen" style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap"></div>
+    <div id="diasFindeList" style="margin-top:10px"></div>
     <div id="diasNoEfectivosList" style="margin-top:10px"></div>
   </div>
 
@@ -1048,7 +1055,13 @@ function renderDevolucionLista(){
   const hist=document.getElementById('devolucionHist');
   if(hist){
     const h=(state.devoluciones||[]).slice().reverse();
-    hist.innerHTML=h.length?('<div class="small" style="font-weight:700;margin-bottom:4px">Historial de devoluciones</div>'+h.map(d=>`<div class="small" style="padding:4px 0;border-bottom:1px solid var(--line)">📦 ${fmtFecha(d.fecha)} · ${d.equipos.length} equipo(s)${d.conCorreo?' · correo enviado':' · sin correo'}: ${esc(d.equipos.map(x=>x.nombre+(x.ip?' ('+x.ip+')':'')).join(', '))}</div>`).join('')):'';
+    const totalDev=totalDevoluciones();
+    hist.innerHTML=h.length?('<div class="small" style="font-weight:700;margin-bottom:6px">Historial de devoluciones · valor recuperado total: <span style="color:var(--green)">'+money(totalDev)+'</span></div>'+h.map(d=>{
+      const sub=d.equipos.reduce((a,x)=>a+(+x.valor||0),0);
+      return `<div style="border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px">
+        <div class="small" style="font-weight:700;margin-bottom:4px">📦 ${fmtFecha(d.fecha)} · ${d.equipos.length} equipo(s)${d.conCorreo?' · correo enviado':' · sin correo'} · <span style="color:var(--green)">${money(sub)}</span></div>
+        <table style="width:100%;font-size:12px;border-collapse:collapse">${d.equipos.map(x=>`<tr><td style="padding:3px 0">${esc(x.nombre)}${x.ip?' <span class="small">('+esc(x.ip)+')</span>':''}</td><td class="small" style="color:var(--muted)">${esc(x.sector||'')}</td><td style="text-align:right;font-weight:700;${x.encontrado===false?'color:var(--nc)':''}">${x.encontrado===false?'sin valor':money(x.valor||0)}</td></tr>`).join('')}</table>
+      </div>`;}).join('')):'';
   }
   if(!marcados.length){cont.innerHTML='<p class="small" style="color:var(--muted)">No hay equipos marcados para devolución.</p>';return;}
   const disp={};dispNames(state.equipos).forEach(x=>disp[x.e.id]=x.disp);
@@ -1058,21 +1071,30 @@ function renderDevolucionLista(){
     + '</table>';
 }
 /* Marca equipos como devueltos (quedan fuera del avance) y guarda el historial */
-function registrarDevueltos(lista, disp, conCorreo){
+function totalDevoluciones(){ return (state.devoluciones||[]).reduce((a,d)=>a+(d.equipos||[]).reduce((b,x)=>b+(+x.valor||0),0),0); }
+function registrarDevueltos(lista, disp, conCorreo, items){
   const hoy=hoyISO();
   state.devoluciones=state.devoluciones||[];
-  state.devoluciones.push({id:uid(),fecha:hoy,conCorreo:!!conCorreo,equipos:lista.map(e=>({nombre:(disp&&disp[e.id])||e.nombre,ip:e.ip||'',sector:e.sector||''}))});
+  const val=(e,i)=>{ const it=items&&items[i]; return it?{valor:+it.valor||0,encontrado:!!it.encontrado,refPrecio:it.refPrecio||''}:{valor:0,encontrado:false,refPrecio:''}; };
+  state.devoluciones.push({id:uid(),fecha:hoy,conCorreo:!!conCorreo,equipos:lista.map((e,i)=>Object.assign({nombre:(disp&&disp[e.id])||e.nombre,ip:e.ip||'',sector:e.sector||''},val(e,i)))});
   lista.forEach(e=>{e.devolucion=true;e.devuelto=true;e.fechaDevolucion=hoy;});
   renderEquipos();recalc();dirty();
 }
 /* Para devoluciones ya enviadas antes: quitar del avance sin volver a mandar el correo */
-function quitarDevueltosSinCorreo(){
+async function quitarDevueltosSinCorreo(){
   if(!requiereEditar())return;
   const marcados=state.equipos.filter(e=>e.devolucion);
   if(!marcados.length){alert('No hay equipos marcados para devolución.');return;}
   if(!confirm('¿Quitar del avance '+marcados.length+' equipo(s) marcados para devolución SIN enviar correo?\n\nÚsalo solo si la devolución ya se informó antes.'))return;
   const disp={};dispNames(state.equipos).forEach(x=>disp[x.e.id]=x.disp);
-  registrarDevueltos(marcados, disp, false);
+  let items=null;
+  try{
+    if(window.DEVOLUCION_ENDPOINT&&!/PEGA_AQUI/.test(window.DEVOLUCION_ENDPOINT)){
+      const res=await fetch(window.DEVOLUCION_ENDPOINT,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({accion:'cotizar',equipos:marcados.map(e=>({nombre:disp[e.id]||e.nombre,base:e.nombre}))})});
+      const d=await res.json(); if(d&&d.ok)items=d.items;
+    }
+  }catch(e){ console.warn('No se pudieron obtener los valores:',e); }
+  registrarDevueltos(marcados, disp, false, items);
   state.equipos=state.equipos.filter(e=>!e.devuelto);
   renderAll();dirty();
   const st=document.getElementById('devolucionStatus'); if(st){st.textContent='✅ '+marcados.length+' equipo(s) quitados del avance.';st.style.color='var(--green)';}
@@ -1084,15 +1106,17 @@ async function realizarDevolucion(){
   if(!window.DEVOLUCION_ENDPOINT||/PEGA_AQUI/.test(window.DEVOLUCION_ENDPOINT)){alert('Falta configurar el endpoint de devolución (window.DEVOLUCION_ENDPOINT) en este archivo.');return;}
   if(!confirm('¿Enviar correo de devolución con '+marcados.length+' equipo(s)?'))return;
   const disp={};dispNames(state.equipos).forEach(x=>disp[x.e.id]=x.disp);
-  const payload={proyecto:state.proyecto.nombre||'',responsable:state.proyecto.jefe||'',equipos:marcados.map(e=>({nombre:disp[e.id]||e.nombre,ip:e.ip||'',sector:e.sector||''}))};
+  const payload={proyecto:state.proyecto.nombre||'',responsable:state.proyecto.jefe||'',equipos:marcados.map(e=>({nombre:disp[e.id]||e.nombre,base:e.nombre,ip:e.ip||'',sector:e.sector||''}))};
   const status=document.getElementById('devolucionStatus');
   status.textContent='Enviando…';status.style.color='var(--muted)';
   try{
     const res=await fetch(window.DEVOLUCION_ENDPOINT,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
     const data=await res.json();
     if(data&&data.ok){
-      registrarDevueltos(marcados, disp, true);
-      status.textContent='✅ Correo de devolución enviado ('+data.enviados+' equipo(s)). Ya no cuentan en el avance y se quitarán de la lista al volver a cargar el proyecto.';status.style.color='var(--green)';
+      registrarDevueltos(marcados, disp, true, data.items);
+      const sinV=(data.items||[]).filter(x=>!x.encontrado).length;
+      status.textContent='✅ Correo de devolución enviado ('+data.enviados+' equipo(s)) · valor recuperado '+money(data.total||0)+(sinV?(' · ⚠️ '+sinV+' sin valor en la planilla'):'')+'. Ya no cuentan en el avance y se quitarán de la lista al volver a cargar el proyecto.';status.style.color='var(--green)';
+      syncNow(true);
     }else{
       status.textContent='⚠ '+((data&&data.error)||'No se pudo enviar.');status.style.color='var(--nc)';
     }
@@ -1796,6 +1820,7 @@ function applyLoaded(d){
   state.equipos=(state.equipos||[]).filter(e=>!/pilar/i.test(e.nombre||''));
   state.equipos=state.equipos.filter(e=>!e.devuelto);   // devoluciones ya informadas: fuera del avance
   if(!state.devoluciones)state.devoluciones=[];
+  if(!state.diasFinde)state.diasFinde=[];
   state.equipos.forEach(eq=>{if(!eq.id)eq.id=uid();if(!eq.sector)eq.sector='General';if(!Array.isArray(eq.etapas))eq.etapas=INSTALL_STAGES.map(()=>false);if(eq.etapas.length===4){eq.etapas=[!!eq.cableado,...eq.etapas];}if(eq.etapas.length!==INSTALL_STAGES.length){const n=INSTALL_STAGES.map((_,i)=>!!eq.etapas[i]);eq.etapas=n;}delete eq.cableado;if(!eq.qa)eq.qa={};recomputeProbado(eq);});
   Object.values(state.qc||{}).forEach(q=>{if(Array.isArray(q.evals)&&q.evals.length>1){const v=q.evals.includes('NC')?'NC':q.evals.includes('PC')?'PC':q.evals.includes('C')?'C':null;q.evals=[v];}else if(!Array.isArray(q.evals)){q.evals=[null];}});
   renderAll();
@@ -2064,12 +2089,53 @@ function registrarAvance(){
   const st=getStats(),f=hoyISO(),por=document.getElementById('bPor').value||'',nota=document.getElementById('bNota').value||'';
   const now=new Date();const hora=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
   state.bitacora=state.bitacora||[];
-  state.bitacora.push({id:uid(),fecha:f,hora,ts:Date.now(),avance:st.avance,cab:st.cabPct,qc:st.qcConf,qa:st.qaPct,por,nota});
+  const finde=esFinde(f);
+  state.bitacora.push({id:uid(),fecha:f,hora,ts:Date.now(),avance:st.avance,cab:st.cabPct,qc:st.qcConf,qa:st.qaPct,por,nota,finde});
+  if(finde) agregarDiaFinde(f, por, nota||'Registro de avance en fin de semana', true);
   document.getElementById('bNota').value='';renderBitacora();dirty();syncNow(true);
   guardarNube(true); // guarda el avance completo en la nube automáticamente, para poder continuar mañana desde este mismo registro
 }
 function delBitacora(id){if(!confirm('¿Eliminar este registro?'))return;state.bitacora=(state.bitacora||[]).filter(x=>(x.id||x.fecha)!==id);renderBitacora();dirty();}
 
+/* ===== Días de ejecución: lunes a viernes + fines de semana trabajados ===== */
+function esFinde(iso){ const d=new Date(iso+'T12:00'); const w=d.getDay(); return w===0||w===6; }
+function agregarDiaFinde(fecha, por, nota, auto){
+  state.diasFinde=state.diasFinde||[];
+  if(state.diasFinde.some(d=>d.fecha===fecha)) return false;
+  state.diasFinde.push({id:uid(),fecha,por:por||'',nota:nota||'',auto:!!auto});
+  return true;
+}
+function marcarDiaFinde(){
+  if(!requiereEditar())return;
+  const f=document.getElementById('diaFindeFecha').value;
+  if(!f){alert('Elige la fecha del sábado o domingo trabajado.');return;}
+  if(!esFinde(f)){alert('Esa fecha no es sábado ni domingo. Los días de lunes a viernes ya se cuentan solos.');return;}
+  const nota=document.getElementById('diaFindeNota').value||'';
+  if(!agregarDiaFinde(f, (sesion()&&sesion().nombre)||'', nota, false)){alert('Ese día ya está registrado.');return;}
+  document.getElementById('diaFindeFecha').value='';document.getElementById('diaFindeNota').value='';
+  renderBitacora();dirty();syncNow(true);
+}
+function quitarDiaFinde(id){
+  if(!requiereEditar())return;
+  if(!confirm('¿Quitar este fin de semana de los días trabajados?'))return;
+  state.diasFinde=(state.diasFinde||[]).filter(d=>d.id!==id);
+  renderBitacora();dirty();syncNow(true);
+}
+/* Días reales de ejecución entre inicio y fin (incluidos):
+   lunes a viernes, menos los días no efectivos en L–V, más fines de semana trabajados. */
+function calcDiasEjecucion(fin){
+  const ini=state.proyecto.inicio;
+  if(!ini||!fin||fin<ini) return {habiles:0,noEf:0,finde:0,total:0,ok:false};
+  const noEf=new Set((state.diasNoEfectivos||[]).map(d=>d.fecha));
+  let habiles=0,noEfH=0;
+  for(let d=new Date(ini+'T12:00'); d<=new Date(fin+'T12:00'); d.setDate(d.getDate()+1)){
+    const w=d.getDay(); if(w===0||w===6) continue;
+    const iso=d.toISOString().slice(0,10);
+    if(noEf.has(iso)) noEfH++; else habiles++;
+  }
+  const finde=new Set((state.diasFinde||[]).map(d=>d.fecha).filter(x=>x>=ini&&x<=fin)).size;
+  return {habiles,noEf:noEfH,finde,total:habiles+finde,ok:true};
+}
 function marcarDiaNoEfectivo(){
   if(!requiereEditar())return;
   const desde=document.getElementById('diaNoEfDesde').value||hoyISO();
@@ -2114,11 +2180,11 @@ function renderDiasEfectivos(){
   const hoy=hoyISO();
   let transcurridos=0;
   if(ini){transcurridos=Math.round((new Date(hoy)-new Date(ini))/86400000)+1;if(transcurridos<0)transcurridos=0;}
-  const noEfEnRango=ini?noEf.filter(d=>d.fecha>=ini&&d.fecha<=hoy).length:noEf.length;
-  const efectivos=Math.max(transcurridos-noEfEnRango,0);
+  const finProy=(state.proyecto.estado==='Finalizado'&&state.proyecto.fechaCierre)?state.proyecto.fechaCierre:hoy;
+  const de=calcDiasEjecucion(finProy);
   const chip=(txt,val,color)=>`<div style="background:${color||'#F3F4F6'};border-radius:10px;padding:8px 14px;text-align:center;min-width:100px"><div style="font-size:20px;font-weight:800">${val}</div><div style="font-size:11px;color:var(--muted);font-weight:700">${txt}</div></div>`;
   resumen.innerHTML = ini
-    ? chip('Días transcurridos',transcurridos) + chip('Días no efectivos',noEfEnRango,'#FEE2E2') + chip('Días efectivos reales',efectivos,'#DCFCE7')
+    ? chip('Días hábiles (L–V)',de.habiles+de.noEf) + chip('No efectivos (L–V)',de.noEf,'#FEE2E2') + chip('Fin de semana trabajados',de.finde,'#EDE9FE') + chip('Días de ejecución reales',de.total,'#DCFCE7')
     : '<p class="small">Define la "Fecha inicio instalación" en la pestaña Proyecto para calcular los días efectivos.</p>';
   list.innerHTML = noEf.length ? noEf.map(d=>`
     <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)">
@@ -2129,6 +2195,15 @@ function renderDiasEfectivos(){
 }
 function renderBitacora(){
   renderDiasEfectivos();
+  const lf=document.getElementById('diasFindeList');
+  if(lf){ const fd=(state.diasFinde||[]).slice().sort((a,b)=>a.fecha<b.fecha?1:-1);
+    lf.innerHTML=fd.length?('<div class="small" style="font-weight:700;margin-bottom:4px">📅 Fines de semana trabajados</div>'+fd.map(d=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)">
+      <span style="font-weight:700;min-width:95px">${fmtFecha(d.fecha)}</span>
+      <span class="small" style="background:#EDE9FE;color:#6D28D9;border-radius:999px;padding:2px 8px;font-weight:700">${new Date(d.fecha+'T12:00').getDay()===6?'Sábado':'Domingo'}${d.auto?' · automático':''}</span>
+      <span class="small" style="flex:1;color:var(--muted)">${esc((d.por?d.por+' · ':'')+(d.nota||''))}</span>
+      <button class="btn-sm" onclick="quitarDiaFinde('${d.id}')" title="Quitar">✕</button>
+    </div>`).join('')):''; }
   const por=document.getElementById('bPor');
   if(por){const cur=por.value,opts=[];if(state.proyecto.jefe)opts.push(state.proyecto.jefe);(state.proyecto.tecnicosAsg||[]).forEach(t=>{if(!opts.includes(t))opts.push(t);});
     por.innerHTML='<option value="">—</option>'+opts.map(o=>`<option>${esc(o)}</option>`).join('');por.value=cur||state.proyecto.jefe||'';}
@@ -2159,7 +2234,7 @@ function renderBitacora(){
   document.getElementById('bHoyInfo').textContent=hoyN?('Hoy llevas '+hoyN+' registro(s). Cada "Registrar hoy" agrega un nuevo log.'):'Aún no hay registros para hoy.';
   const list=(state.bitacora||[]).slice().sort((a,c)=>(c.ts||0)-(a.ts||0));
   document.getElementById('bCount').textContent=list.length;
-  document.getElementById('bBody').innerHTML=list.length?list.map(x=>`<tr><td>${fmtFecha(x.fecha)}${x.hora?` <span class="small">${x.hora}</span>`:''}</td><td class="center"><b>${x.avance}%</b></td><td class="center">${x.cab}%</td><td class="center">${x.qc}%</td><td>${esc(x.por||'—')}</td><td class="small">${esc(x.nota||'')}</td><td class="center"><button class="iconbtn" onclick="delBitacora('${x.id||x.fecha}')">🗑</button></td></tr>`).join(''):'<tr><td colspan="7" class="empty">Sin registros. Marca avance en los equipos y pulsa "Registrar hoy".</td></tr>';
+  document.getElementById('bBody').innerHTML=list.length?list.map(x=>`<tr><td>${fmtFecha(x.fecha)}${x.hora?` <span class="small">${x.hora}</span>`:''}${(x.finde||esFinde(x.fecha))?' <span class="small" style="background:#EDE9FE;color:#6D28D9;border-radius:999px;padding:1px 7px;font-weight:700">fin de semana</span>':''}</td><td class="center"><b>${x.avance}%</b></td><td class="center">${x.cab}%</td><td class="center">${x.qc}%</td><td>${esc(x.por||'—')}</td><td class="small">${esc(x.nota||'')}</td><td class="center"><button class="iconbtn" onclick="delBitacora('${x.id||x.fecha}')">🗑</button></td></tr>`).join(''):'<tr><td colspan="7" class="empty">Sin registros. Marca avance en los equipos y pulsa "Registrar hoy".</td></tr>';
 }
 function bitChartSVG(sc){
   const W=640,H=250,L=32,R=14,T=14,B=30,pw=W-L-R,ph=H-T-B;
@@ -2217,7 +2292,8 @@ function buildSnapshot(){
   const finalizado=(p.estado==='Finalizado');
   const fechaCierre=p.fechaCierre||(finalizado?hoyISO():'');
   const diasPlan=dd(p.inicio,p.termino);
-  const diasReales=finalizado?dd(p.inicio,fechaCierre):null;
+  const _de=calcDiasEjecucion(finalizado?fechaCierre:hoyISO());
+  const diasReales=finalizado?(_de.ok?_de.total:dd(p.inicio,fechaCierre)):null;
   const desvioDias=(diasPlan!=null&&diasReales!=null)?(diasReales-diasPlan):null;
   const nEq=eqActivos().length;
   return{
@@ -2228,6 +2304,11 @@ function buildSnapshot(){
     avance:st.avance, cabPct:st.cabPct, qcConf:st.qcConf, qaPct:st.qaPct,
     equiposTotal:nEq, equiposListos:listos, equiposEnTerreno:eqActivos().filter(e=>e.enTerreno).length,
     nTecnicos:state.tecnicos.length, diasHombre:dh,
+    // técnicos SIN contar al jefe (la cuadrilla en Seguimiento ya incluye al jefe)
+    nTecSinJefe: state.tecnicos.filter(t=>t.nombre && !t.jefe && t.nombre!==(p.jefe||'')).length,
+    devolucionTotal: totalDevoluciones(),
+    devolucionDetalle: (state.devoluciones||[]).flatMap(d=>(d.equipos||[]).map(x=>({fecha:d.fecha,nombre:x.nombre,sector:x.sector||'',valor:+x.valor||0,encontrado:x.encontrado!==false}))).slice(0,300),
+    diasHabiles:_de.ok?_de.habiles:null, diasFinde:_de.ok?_de.finde:null, diasNoEfectivosLV:_de.ok?_de.noEf:null,
     estado: finalizado?'Finalizado':(sc.ok?sc.estado:'Sin fechas'),
     finalizado, fechaCierre,
     diasRest: sc.ok?sc.diasRest:null, diasTrans: sc.ok?sc.diasTrans:null,
